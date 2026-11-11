@@ -25,9 +25,32 @@ test('primary action opens the intake without calling the order API', async ({ p
   await page.goto('/')
 
   await page.getByRole('link', { name: 'Построить мою карту' }).click()
-  await expect(page).toHaveURL('/create')
-  await expect(page.getByRole('heading', { level: 1, name: 'Анкета рождения' })).toBeFocused()
+  await expect(page).toHaveURL('/create?step=name')
+  await expect(page.getByLabel('Имя')).toBeFocused()
   expect(orderCalls).toEqual([])
+})
+
+test('M01 plays on the first visit only; coming back from the intake is a calm return', async ({ page }) => {
+  const entrances = () =>
+    page.evaluate(
+      () =>
+        [...document.querySelectorAll('[data-hero-part]')].flatMap((el) =>
+          el.getAnimations().filter((a) => (a as CSSAnimation).animationName.startsWith('hero-part-in')),
+        ).length,
+    )
+  await page.goto('/')
+  await expect(page.locator('[data-hero-part]')).toHaveCount(7)
+  expect(await entrances()).toBe(7)
+
+  await page.getByRole('link', { name: 'Построить мою карту' }).click()
+  await expect(page).toHaveURL('/create?step=name')
+  await page.getByRole('link', { name: 'На главную' }).click()
+  await expect(page).toHaveURL('/')
+  await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+  expect(await entrances()).toBe(0)
+  await expect(page.locator('main#main')).toHaveCSS('opacity', '1')
+  await expect(page.locator('.cosmos-scene')).toHaveAttribute('data-scene-composition', 'hero')
+  await expect(page.locator('.hero__captions')).toHaveCSS('opacity', '1', { timeout: 3000 })
 })
 
 test('secondary action opens the example', async ({ page }) => {

@@ -51,8 +51,8 @@ export function halfEllipsePath(e: Ellipse, far: boolean, segments = 96): string
   return parts.join(' ')
 }
 
-export function bodyPosition(planet: Circle, system: OrbitSystem, body: BodySpec, time: number): Point {
-  return pointOnEllipse(orbitEllipse(planet, system, body.orbit), body.angle + body.speed * time)
+export function bodyPosition(planet: Circle, system: OrbitSystem, body: BodySpec, time: number, phase = 0): Point {
+  return pointOnEllipse(orbitEllipse(planet, system, body.orbit), body.angle + phase + body.speed * time)
 }
 
 /** Small deterministic PRNG (mulberry32) so the star field is stable between visits and in snapshots. */
@@ -78,21 +78,42 @@ export interface Star {
   rate: number
 }
 
+/** Draws one star; the order of random() calls is fixed, snapshots depend on it. */
+function star(random: () => number, width: number, height: number, origin = 0): Star {
+  // Squaring biases towards faint, small stars; a few are brighter.
+  const brightness = random() ** 2
+  return {
+    x: random() * width - origin,
+    y: random() * height - origin,
+    size: 0.8 + brightness * 1.6,
+    alpha: 0.25 + brightness * 0.6,
+    phase: random() * Math.PI * 2,
+    rate: 0.4 + random() * 1.2,
+  }
+}
+
 export function starField(viewport: Size, densityPer100k: number, seed = 20261111): Star[] {
   const random = seededRandom(seed)
   const count = Math.round(((viewport.width * viewport.height) / 100_000) * densityPer100k)
   const stars: Star[] = []
-  for (let i = 0; i < count; i++) {
-    // Squaring biases towards faint, small stars; a few are brighter.
-    const brightness = random() ** 2
-    stars.push({
-      x: random() * viewport.width,
-      y: random() * viewport.height,
-      size: 0.8 + brightness * 1.6,
-      alpha: 0.25 + brightness * 0.6,
-      phase: random() * Math.PI * 2,
-      rate: 0.4 + random() * 1.2,
-    })
+  for (let i = 0; i < count; i++) stars.push(star(random, viewport.width, viewport.height))
+  return stars
+}
+
+/**
+ * Stars in a band of `margin` pixels around the viewport, for a field that
+ * shifts with the camera. Separate seed: the stars inside the viewport stay
+ * exactly those of starField.
+ */
+export function starMargin(viewport: Size, densityPer100k: number, margin: number, seed = 20261112): Star[] {
+  const random = seededRandom(seed)
+  const outer = { width: viewport.width + margin * 2, height: viewport.height + margin * 2 }
+  const area = outer.width * outer.height - viewport.width * viewport.height
+  const count = Math.round((area / 100_000) * densityPer100k)
+  const stars: Star[] = []
+  while (stars.length < count) {
+    const s = star(random, outer.width, outer.height, margin)
+    if (s.x < 0 || s.x >= viewport.width || s.y < 0 || s.y >= viewport.height) stars.push(s)
   }
   return stars
 }

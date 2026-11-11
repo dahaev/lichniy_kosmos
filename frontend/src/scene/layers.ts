@@ -1,7 +1,7 @@
 import { BufferAttribute, BufferGeometry, Mesh, Points, ShaderMaterial, Vector2, Vector3 } from 'three'
 
 import type { OrbitSystem } from './compositions'
-import { pointOnEllipse, type Ellipse, type Star } from './geometry'
+import type { Ellipse, Star } from './geometry'
 import type { Circle } from './plates'
 
 // All layers draw in CSS pixels with y down and output premultiplied alpha:
@@ -79,22 +79,34 @@ export function createStars(stars: readonly Star[]): Points {
   return new Points(geometry, material(starVertex, starFragment, { uTime: { value: 0 }, uPixelRatio: { value: 1 } }))
 }
 
+// The ellipse lives in uniforms and is evaluated per vertex, so a camera
+// move changes a handful of numbers instead of rebuilding the ribbon.
 const orbitVertex = /* glsl */ `
-  attribute vec2 aNormal;
+  attribute float aT;
   attribute float aSide;
-  attribute float aFar;
+  uniform vec2 uCenter;
+  uniform vec2 uAxes;
+  uniform float uTilt;
   uniform float uHalfWidth;
   uniform vec2 uOffset;
   varying vec2 vPos;
   varying float vDist;
   varying float vFar;
   void main() {
+    float c = cos(uTilt);
+    float s = sin(uTilt);
+    vec2 local = vec2(uAxes.x * cos(aT), uAxes.y * sin(aT));
+    vec2 tangentLocal = vec2(-uAxes.x * sin(aT), uAxes.y * cos(aT));
+    vec2 p = uCenter + vec2(local.x * c - local.y * s, local.x * s + local.y * c);
+    vec2 tangent = vec2(tangentLocal.x * c - tangentLocal.y * s, tangentLocal.x * s + tangentLocal.y * c);
+    vec2 normal = normalize(vec2(-tangent.y, tangent.x));
     // One extra pixel on each side carries the antialiased edge.
     float h = uHalfWidth + 1.0;
-    vec2 p = position.xy + aNormal * aSide * h + uOffset;
+    p += normal * aSide * h + uOffset;
     vPos = p;
     vDist = aSide * h;
-    vFar = aFar;
+    // Smooth 0→1 across the limbs instead of a hard switch at sin t = 0.
+    vFar = clamp(-sin(aT) * 6.0, 0.0, 1.0);
     gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 0.0, 1.0);
   }
 `
@@ -119,30 +131,19 @@ const orbitFragment = /* glsl */ `
 const ORBIT_SEGMENTS = 720
 
 /** Ribbon mesh instead of GL lines: lines are one device pixel wide, too thin on retina. */
-export function createOrbit(ellipse: Ellipse, system: OrbitSystem, planet: Circle, u: number): Mesh {
+export function createOrbit(): Mesh {
   const count = ORBIT_SEGMENTS + 1
+  // Position is unused by the shader but sizes the draw for three.js.
   const position = new Float32Array(count * 2 * 3)
-  const normal = new Float32Array(count * 2 * 2)
+  const angle = new Float32Array(count * 2)
   const side = new Float32Array(count * 2)
-  const far = new Float32Array(count * 2)
   const index: number[] = []
   for (let i = 0; i < count; i++) {
     const t = (i / ORBIT_SEGMENTS) * Math.PI * 2
-    const p = pointOnEllipse(ellipse, t)
-    const q = pointOnEllipse(ellipse, t + 0.001)
-    const length = Math.hypot(q.x - p.x, q.y - p.y) || 1
-    const nx = -(q.y - p.y) / length
-    const ny = (q.x - p.x) / length
-    // Smooth 0→1 across the limbs instead of a hard switch at sin t = 0.
-    const farness = Math.min(Math.max(-Math.sin(t) * 6, 0), 1)
     for (let k = 0; k < 2; k++) {
       const v = i * 2 + k
-      position[v * 3] = p.x
-      position[v * 3 + 1] = p.y
-      normal[v * 2] = nx
-      normal[v * 2 + 1] = ny
+      angle[v] = t
       side[v] = k === 0 ? -1 : 1
-      far[v] = farness
     }
     if (i < ORBIT_SEGMENTS) {
       const a = i * 2
@@ -151,29 +152,46 @@ export function createOrbit(ellipse: Ellipse, system: OrbitSystem, planet: Circl
   }
   const geometry = new BufferGeometry()
   geometry.setAttribute('position', new BufferAttribute(position, 3))
-  geometry.setAttribute('aNormal', new BufferAttribute(normal, 2))
+  geometry.setAttribute('aT', new BufferAttribute(angle, 1))
   geometry.setAttribute('aSide', new BufferAttribute(side, 1))
-  geometry.setAttribute('aFar', new BufferAttribute(far, 1))
   geometry.setIndex(index)
-  return new Mesh(
+  const mesh = new Mesh(
     geometry,
     material(orbitVertex, orbitFragment, {
-      uHalfWidth: { value: (system.width * u) / 2 },
-      uOpacity: { value: system.opacity },
-      uBackOverPlanet: { value: system.backOverPlanet },
-      uPlanet: { value: new Vector3(planet.x, planet.y, planet.r) },
+      uCenter: { value: new Vector2() },
+      uAxes: { value: new Vector2() },
+      uTilt: { value: 0 },
+      uHalfWidth: { value: 0.5 },
+      uOpacity: { value: 0 },
+      uBackOverPlanet: { value: 1 },
+      uPlanet: { value: new Vector3() },
     }),
   )
+  // The vertices are placed in the shader, so the CPU bounds are meaningless.
+  mesh.frustumCulled = false
+  return mesh
+}
+
+export function setOrbit(mesh: Mesh, ellipse: Ellipse, system: OrbitSystem, planet: Circle, u: number): void {
+  const uniforms = (mesh.material as ShaderMaterial).uniforms
+  ;(uniforms.uCenter?.value as Vector2).set(ellipse.center.x, ellipse.center.y)
+  ;(uniforms.uAxes?.value as Vector2).set(ellipse.a, ellipse.b)
+  ;(uniforms.uPlanet?.value as Vector3).set(planet.x, planet.y, planet.r)
+  if (uniforms.uTilt) uniforms.uTilt.value = ellipse.tilt
+  if (uniforms.uHalfWidth) uniforms.uHalfWidth.value = (system.width * u) / 2
+  if (uniforms.uOpacity) uniforms.uOpacity.value = system.opacity
+  if (uniforms.uBackOverPlanet) uniforms.uBackOverPlanet.value = system.backOverPlanet
 }
 
 const bodyVertex = /* glsl */ `
   attribute float aSize;
   uniform float uPixelRatio;
   uniform float uSpread;
+  uniform float uScale;
   uniform vec2 uOffset;
   void main() {
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position.xy + uOffset, 0.0, 1.0);
-    gl_PointSize = aSize * uSpread * uPixelRatio;
+    gl_PointSize = aSize * uSpread * uScale * uPixelRatio;
   }
 `
 
@@ -211,11 +229,15 @@ export function createBodies(sizes: readonly number[], kind: 'glow' | 'moon'): P
   geometry.setAttribute('position', new BufferAttribute(new Float32Array(sizes.length * 3), 3))
   geometry.setAttribute('aSize', new BufferAttribute(Float32Array.from(sizes), 1))
   const spread = kind === 'glow' ? 7 : 1
-  return new Points(
+  const points = new Points(
     geometry,
     material(bodyVertex, kind === 'glow' ? glowFragment : moonFragment, {
       uPixelRatio: { value: 1 },
       uSpread: { value: spread },
+      uScale: { value: 1 },
     }),
   )
+  // Positions change every frame; bounds computed once would cull moved bodies.
+  points.frustumCulled = false
+  return points
 }

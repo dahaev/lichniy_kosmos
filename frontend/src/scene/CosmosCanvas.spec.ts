@@ -8,7 +8,6 @@ import { useSceneStore } from './sceneStore'
 
 const director = vi.hoisted(() => ({
   constructed: vi.fn(),
-  compose: vi.fn(),
   setVisible: vi.fn(),
   setLayout: vi.fn(),
   setMotion: vi.fn(),
@@ -22,7 +21,6 @@ vi.mock('./SceneDirector', () => ({
     constructor() {
       director.constructed()
     }
-    compose = director.compose
     setVisible = director.setVisible
     setLayout = director.setLayout
     setMotion = director.setMotion
@@ -90,8 +88,44 @@ describe('CosmosCanvas', () => {
 
     expect(wrapper.attributes('data-scene-orientation')).toBe('portrait')
     expect(wrapper.attributes('data-scene-ground')).toBe('page')
-    expect(wrapper.find('.scene-poster img').attributes('style')).toMatch(/mask-image: linear-gradient/)
+    expect(wrapper.find('.scene-poster__ground-veil').attributes('style')).toMatch(/opacity: 1/)
     vi.unstubAllGlobals()
+  })
+
+  it('moves the poster plate on the static tier and keeps the hero captions in place', async () => {
+    vi.spyOn(quality, 'readDeviceSignals').mockReturnValue({ ...capable, webgl: false })
+
+    const wrapper = mount(CosmosCanvas)
+    await flushPromises()
+    const plate = wrapper.find<HTMLElement>('.scene-poster__plate').element
+    const heroTransform = plate.style.transform
+    const heroPlanetX = document.documentElement.style.getPropertyValue('--planet-x')
+
+    useSceneStore().compose('intake.name')
+    await flushPromises()
+    await vi.waitFor(() => {
+      expect(plate.style.transform).not.toBe(heroTransform)
+    }, { timeout: 3000 })
+    expect(document.documentElement.style.getPropertyValue('--planet-x')).toBe(heroPlanetX)
+    expect(wrapper.attributes('data-scene-composition')).toBe('intake.name')
+  })
+
+  it('keeps flying when the viewport changes mid-flight instead of cutting', async () => {
+    vi.spyOn(quality, 'readDeviceSignals').mockReturnValue({ ...capable, webgl: false })
+
+    const wrapper = mount(CosmosCanvas)
+    await flushPromises()
+    const scene = useSceneStore()
+    scene.compose('intake.name')
+    await vi.waitFor(() => {
+      expect(wrapper.attributes('data-scene-moving')).toBe('true')
+    })
+
+    const viewport = scene.viewport
+    if (!viewport) throw new Error('no viewport')
+    scene.viewport = { width: viewport.width + 15, height: viewport.height }
+    await flushPromises()
+    expect(wrapper.attributes('data-scene-moving')).toBe('true')
   })
 
   it('starts the director on capable devices and forwards compositions', async () => {
@@ -106,9 +140,12 @@ describe('CosmosCanvas', () => {
     expect(wrapper.attributes('data-scene-state')).toBe('webgl')
     expect(wrapper.attributes('data-scene-tier')).toBe('high')
 
-    useSceneStore().compose('intake')
+    useSceneStore().compose('intake.name')
     await flushPromises()
-    expect(director.compose).toHaveBeenLastCalledWith('intake')
+    expect(director.setLayout).toHaveBeenLastCalledWith(
+      expect.objectContaining({ composition: expect.objectContaining({ coverage: 'free' }) }),
+      expect.objectContaining({ duration: 1400 }),
+    )
 
     wrapper.unmount()
     expect(director.dispose).toHaveBeenCalledOnce()

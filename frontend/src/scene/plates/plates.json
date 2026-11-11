@@ -12,6 +12,8 @@
         "r": 265
       },
       "horizonY": 650,
+      "groundTop": 600,
+      "groundFade": 140,
       "files": {
         "1024": {
           "webp": "hero-landscape-1024.webp",
@@ -35,6 +37,7 @@
       },
       "horizonY": 1200,
       "groundTop": 820,
+      "groundFade": 220,
       "files": {
         "540": {
           "webp": "hero-portrait-540.webp",

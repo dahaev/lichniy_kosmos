@@ -58,8 +58,13 @@
   --cosmos-dur-route: 700ms;
   --cosmos-dur-camera: 1200ms;
   --cosmos-dur-reveal: 2400ms;
+  --cosmos-dur-camera-route: 1400ms;
+  --cosmos-dur-camera-step: 1000ms;
+  --cosmos-dur-step-enter: 420ms;
+  --cosmos-dur-step-exit: 200ms;
   --cosmos-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --cosmos-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --cosmos-ease-cinematic: cubic-bezier(0.3, 0.05, 0.1, 1);
 
   /* Layers */
   --cosmos-z-scene: 0;
@@ -74,5 +79,9 @@
     --cosmos-dur-route: 200ms;
     --cosmos-dur-camera: 0ms;
     --cosmos-dur-reveal: 0ms;
+    --cosmos-dur-camera-route: 0ms;
+    --cosmos-dur-camera-step: 0ms;
+    --cosmos-dur-step-enter: 200ms;
+    --cosmos-dur-step-exit: 120ms;
   }
 }

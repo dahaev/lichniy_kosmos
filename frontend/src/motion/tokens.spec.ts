@@ -16,13 +16,16 @@ function cssVar(name: string): string {
 }
 
 describe('motion tokens', () => {
+  const kebab = (name: string) => name.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)
+
   it.each(Object.entries(durations))('duration %s matches tokens.css', (name, ms) => {
-    expect(cssVar(`cosmos-dur-${name}`)).toBe(`${String(ms)}ms`)
+    expect(cssVar(`cosmos-dur-${kebab(name)}`)).toBe(`${String(ms)}ms`)
   })
 
   it.each([
     ['cosmos-ease-out', easings.out],
     ['cosmos-ease-in-out', easings.inOut],
+    ['cosmos-ease-cinematic', easings.cinematic],
   ] as const)('%s matches tokens.css', (name, curve) => {
     expect(cssVar(name)).toBe(`cubic-bezier(${curve.join(', ')})`)
   })

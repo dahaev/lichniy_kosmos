@@ -1,8 +1,9 @@
 import { defineStore } from 'pinia'
 import { computed, ref, shallowRef, watch } from 'vue'
 
-import { compositions, type CompositionName, type SceneOrientation } from './compositions'
-import type { SceneFrame } from './layout'
+import { compositions, type CompositionName, type SceneComposition, type SceneOrientation } from './compositions'
+import { computeFrame, type SceneFrame, type Size } from './layout'
+import { plates } from './plates'
 import type { QualityTier } from './quality'
 
 /**
@@ -28,14 +29,18 @@ function storedPause(): boolean | null {
   }
 }
 
+export function frameOf(viewport: Size, composition: SceneComposition): SceneFrame {
+  return computeFrame(viewport, composition.design, composition.planet, plates[composition.plate], composition.coverage)
+}
+
 /** UI-side view of the scene. WebGL is never a source of truth for product state. */
 export const useSceneStore = defineStore('scene', () => {
   const composition = ref<CompositionName>('hero')
   const state = ref<SceneState>('pending')
   const tier = ref<QualityTier | null>(null)
   const orientation = ref<SceneOrientation>('landscape')
-  /** Current viewport frame; screens read planet geometry from CSS variables instead. */
-  const frame = shallowRef<SceneFrame | null>(null)
+  /** Measured viewport of the scene; null until CosmosCanvas has mounted. */
+  const viewport = shallowRef<Size | null>(null)
   /**
    * Ambient motion is stopped (WCAG 2.2.2). Starts stopped under
    * prefers-reduced-motion; the visitor's own choice wins for the session.
@@ -43,6 +48,18 @@ export const useSceneStore = defineStore('scene', () => {
   const motionPaused = ref(storedPause() ?? prefersReducedMotion())
 
   const active = computed(() => compositions[composition.value][orientation.value])
+
+  /**
+   * Frame of any composition for the current viewport. A screen pinned to
+   * its own composition (the hero) reads it here, so it keeps its layout
+   * while the scene already flies to the next screen.
+   */
+  function frameFor(name: CompositionName): SceneFrame | null {
+    return viewport.value ? frameOf(viewport.value, compositions[name][orientation.value]) : null
+  }
+
+  /** Frame the scene is at, or flying to. Screens read planet geometry from CSS variables instead. */
+  const frame = computed(() => frameFor(composition.value))
 
   watch(motionPaused, (paused) => {
     try {
@@ -60,5 +77,5 @@ export const useSceneStore = defineStore('scene', () => {
     motionPaused.value = !motionPaused.value
   }
 
-  return { composition, state, tier, orientation, frame, motionPaused, active, compose, toggleMotion }
+  return { composition, state, tier, orientation, viewport, frame, motionPaused, active, frameFor, compose, toggleMotion }
 })
