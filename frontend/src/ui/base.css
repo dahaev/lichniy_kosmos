@@ -6,6 +6,9 @@
 
 html {
   color-scheme: dark;
+  scrollbar-color: rgba(225, 218, 207, .22) transparent;
+  accent-color: var(--cosmos-gold);
+  caret-color: var(--cosmos-gold-light);
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
 }
@@ -20,6 +23,11 @@ body {
   font-size: var(--cosmos-text-body);
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+}
+
+::selection {
+  background: rgba(200, 170, 119, .32);
+  color: var(--cosmos-text);
 }
 
 :focus-visible {

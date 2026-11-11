@@ -1,0 +1,26 @@
+{
+  "source": "docs/frontend/references/hero-approved.png",
+  "viewport": { "width": 1440, "height": 873 },
+  "units": "CSS pixels of the reference frame: (source px - frame origin) x 0.70866",
+  "tolerance": "2% of the viewport width for x, of its height for y (FRONTEND_ACCEPTANCE)",
+  "measuredBy": "luminance profiles of the source, SCR-01 journal stage 3",
+  "anchors": {
+    "headingLeft": { "axis": "x", "value": 74.4 },
+    "headingRight": { "axis": "x", "value": 562 },
+    "headingBaseline": { "axis": "y", "value": 260.8 },
+    "accentRight": { "axis": "x", "value": 508 },
+    "accentBaseline": { "axis": "y", "value": 367.8 },
+    "leadBaseline": { "axis": "y", "value": 435.8 },
+    "ctaLeft": { "axis": "x", "value": 72.3 },
+    "ctaTop": { "axis": "y", "value": 507.4 },
+    "ctaWidth": { "axis": "x", "value": 239.5 },
+    "ctaHeight": { "axis": "y", "value": 58.1 },
+    "planetX": { "axis": "x", "value": 1105.5 },
+    "planetY": { "axis": "y", "value": 288.4 },
+    "planetR": { "axis": "y", "value": 294.8 },
+    "horizonY": { "axis": "y", "value": 726 },
+    "stripLineY": { "axis": "y", "value": 743 },
+    "toggleX": { "axis": "x", "value": 1350 },
+    "toggleY": { "axis": "y", "value": 808 }
+  }
+}

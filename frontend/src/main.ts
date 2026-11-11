@@ -3,6 +3,8 @@ import { createApp } from 'vue'
 
 import App from './app/App.vue'
 import { createAppRouter } from './app/router'
+import '@fontsource-variable/manrope'
+import '@fontsource/cormorant-garamond/400-italic.css'
 import './ui/tokens.css'
 import './ui/base.css'
 

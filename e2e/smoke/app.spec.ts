@@ -1,5 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 
+const homeHeading = /^У каждого —\s*свой космос\.$/
+
 function collectConsoleErrors(page: Page): string[] {
   const errors: string[] = []
   page.on('console', (msg) => {
@@ -14,7 +16,7 @@ test('home opens with MSW mocks as the data source', async ({ page }) => {
   await page.goto('/')
 
   await expect(page).toHaveTitle('Главная — Личный космос')
-  await expect(page.getByRole('heading', { level: 1, name: 'Главная' })).toBeVisible()
+  await expect(page.getByRole('heading', { level: 1, name: homeHeading })).toBeVisible()
   await expect(page.getByTestId('api-source')).toHaveText('MSW-моки')
   expect(errors).toEqual([])
 })
@@ -103,6 +105,6 @@ test.describe('reduced motion', () => {
       }
     })
     expect(tokens).toEqual({ route: '200ms', camera: '0ms', reveal: '0ms' })
-    await expect(page.getByRole('heading', { level: 1, name: 'Главная' })).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: homeHeading })).toBeVisible()
   })
 })

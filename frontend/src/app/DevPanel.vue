@@ -39,8 +39,8 @@ const links = routes
 <style scoped>
 .dev-panel {
   position: fixed;
+  top: 0.75rem;
   right: 0.75rem;
-  bottom: 0.75rem;
   z-index: var(--cosmos-z-overlay);
   max-width: min(22rem, calc(100vw - 1.5rem));
   padding: 0.5rem 0.75rem;

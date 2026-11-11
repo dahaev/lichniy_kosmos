@@ -1,0 +1,50 @@
+{
+  "generatedBy": "scripts/build-scene-plates.mjs",
+  "plates": [
+    {
+      "id": "hero-landscape",
+      "temporary": true,
+      "width": 1464,
+      "height": 896,
+      "planet": {
+        "x": 1147,
+        "y": 259.5,
+        "r": 265
+      },
+      "horizonY": 650,
+      "files": {
+        "1024": {
+          "webp": "hero-landscape-1024.webp",
+          "avif": "hero-landscape-1024.avif"
+        },
+        "1464": {
+          "webp": "hero-landscape-1464.webp",
+          "avif": "hero-landscape-1464.avif"
+        }
+      }
+    },
+    {
+      "id": "hero-portrait",
+      "temporary": true,
+      "width": 720,
+      "height": 1280,
+      "planet": {
+        "x": 433,
+        "y": 297,
+        "r": 283
+      },
+      "horizonY": 1200,
+      "groundTop": 820,
+      "files": {
+        "540": {
+          "webp": "hero-portrait-540.webp",
+          "avif": "hero-portrait-540.avif"
+        },
+        "720": {
+          "webp": "hero-portrait-720.webp",
+          "avif": "hero-portrait-720.avif"
+        }
+      }
+    }
+  ]
+}

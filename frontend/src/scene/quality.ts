@@ -2,7 +2,9 @@
  * Quality tiers from ARCHITECTURE_MVP_v2 §17.3. S0 decides from static device
  * signals; first-frame timing is added when the real scene exists (V1).
  */
-export type QualityTier = 'high' | 'medium' | 'low' | 'static'
+export const qualityTiers = ['high', 'medium', 'low', 'static'] as const
+
+export type QualityTier = (typeof qualityTiers)[number]
 
 export type RenderTier = Exclude<QualityTier, 'static'>
 

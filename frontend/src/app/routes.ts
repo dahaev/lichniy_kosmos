@@ -13,15 +13,16 @@ declare module 'vue-router' {
   }
 }
 
+const HomeView = () => import('@/features/home/HomeView.vue')
 const StubView = () => import('./views/StubView.vue')
 const NotFoundView = () => import('./views/NotFoundView.vue')
 
 /**
  * Every MVP route exists from S0 so links and guards can be wired early.
- * Each one renders a neutral placeholder until its slice replaces it.
+ * Screens render a neutral placeholder until their slice replaces it.
  */
 export const routes: RouteRecordRaw[] = [
-  { path: '/', name: 'home', component: StubView, meta: { screen: 'SCR-01', title: 'Главная', scene: 'hero', slice: 'V1' } },
+  { path: '/', name: 'home', component: HomeView, meta: { screen: 'SCR-01', title: 'Главная', scene: 'hero', slice: 'V1' } },
   { path: '/create', name: 'create', component: StubView, meta: { screen: 'SCR-02', title: 'Анкета рождения', scene: 'intake', slice: 'V1–V2' } },
   { path: '/create/review', name: 'create-review', component: StubView, meta: { screen: 'SCR-03', title: 'Проверка данных', scene: 'review', slice: 'V2' } },
   { path: '/create/access', name: 'create-access', component: StubView, meta: { screen: 'SCR-04', title: 'Доступ к разбору', scene: 'access', slice: '5' } },
