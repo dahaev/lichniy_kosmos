@@ -1,0 +1,22 @@
+# OS
+.DS_Store
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Go
+/bin/
+*.exe
+*.test
+*.out
+coverage.out
+vendor/
+
+# IDE local state
+.idea/workspace.xml
+.idea/shelf/
+.idea/httpRequests/
+.idea/dataSources/
+.idea/dataSources.local.xml

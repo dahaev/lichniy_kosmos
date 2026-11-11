@@ -1,0 +1,1 @@
+module lichniy_kosmos
