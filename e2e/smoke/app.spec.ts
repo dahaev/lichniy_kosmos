@@ -37,7 +37,6 @@ test('API requests are served by the mock worker', async ({ page }) => {
 })
 
 for (const [path, title] of [
-  ['/create', 'Анкета рождения'],
   ['/orders/demo', 'Ваш разбор'],
   ['/legal/terms', 'Условия использования'],
 ] as const) {
@@ -87,8 +86,16 @@ test('scene shell settles and follows the route composition', async ({ page }) =
 
   await page.getByTestId('dev-panel').locator('summary').click()
   await page.getByRole('link', { name: 'SCR-02 /create', exact: true }).click()
-  await expect(scene).toHaveAttribute('data-scene-composition', 'intake')
+  await expect(scene).toHaveAttribute('data-scene-composition', 'intake.name')
   expect(await page.locator('canvas').count()).toBe(1)
+})
+
+test('the intake opens without console errors and carries its title', async ({ page }) => {
+  const errors = collectConsoleErrors(page)
+  await page.goto('/create')
+  await expect(page).toHaveTitle('Анкета рождения — Личный космос')
+  await expect(page.getByRole('heading', { level: 1, name: 'Как тебя зовут?' })).toBeVisible()
+  expect(errors).toEqual([])
 })
 
 test.describe('reduced motion', () => {

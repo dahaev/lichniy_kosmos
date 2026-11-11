@@ -3,16 +3,21 @@ import { RouterLink, type RouteLocationRaw } from 'vue-router'
 
 import CosmosIcon from './CosmosIcon.vue'
 
-// Light filled action of DESIGN_SYSTEM §6. Navigation only: no network call
-// may hang off it (SCREEN_SPEC MOT-01).
-defineProps<{ to: RouteLocationRaw }>()
+// Light filled action of DESIGN_SYSTEM §6. With `to` it navigates and no
+// network call may hang off it (SCREEN_SPEC MOT-01); without it, it submits
+// the form it sits in.
+defineProps<{ to?: RouteLocationRaw }>()
 </script>
 
 <template>
-  <RouterLink class="primary-cta" :to="to">
+  <RouterLink v-if="to" class="primary-cta" :to="to">
     <span class="primary-cta__label"><slot /></span>
     <CosmosIcon class="primary-cta__arrow" name="arrow-right" />
   </RouterLink>
+  <button v-else class="primary-cta primary-cta--button" type="submit">
+    <span class="primary-cta__label"><slot /></span>
+    <CosmosIcon class="primary-cta__arrow" name="arrow-right" />
+  </button>
 </template>
 
 <style scoped>
@@ -35,6 +40,12 @@ defineProps<{ to: RouteLocationRaw }>()
   transition:
     transform var(--cosmos-dur-micro) var(--cosmos-ease-out),
     background-color var(--cosmos-dur-micro) var(--cosmos-ease-out);
+}
+
+.primary-cta--button {
+  border: 0;
+  font-family: inherit;
+  cursor: pointer;
 }
 
 .primary-cta__arrow {

@@ -140,7 +140,7 @@ for (const plate of config.plates) {
     height: padded.height,
     planet: { x: plate.planet.x + offset.x, y: plate.planet.y + offset.y, r: plate.planet.r },
     horizonY: plate.horizonY + offset.y,
-    ...(plate.groundTop === undefined ? {} : { groundTop: plate.groundTop + offset.y }),
+    ...(plate.groundTop === undefined ? {} : { groundTop: plate.groundTop + offset.y, groundFade: plate.groundFade }),
     files,
   })
   console.log(`${plate.id}: ${padded.width}x${padded.height}`, Object.values(files).map((f) => f.webp).join(', '))

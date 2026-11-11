@@ -15,6 +15,8 @@ tags:
     description: Проверки живости и готовности
   - name: config
     description: Публичная конфигурация клиента
+  - name: places
+    description: Справочник мест рождения
 
 paths:
   /healthz:
@@ -61,6 +63,54 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PublicConfig'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/places:
+    get:
+      tags: [places]
+      operationId: searchPlaces
+      summary: Поиск населённого пункта по началу названия
+      description: |
+        Публичный, с лимитом частоты (§15.2). Сортировка по совпадению и
+        населению; не больше 20 мест. Пустой список — не ошибка.
+      parameters:
+        - name: q
+          in: query
+          required: true
+          description: Начало названия, от 2 символов после обрезки пробелов
+          schema:
+            type: string
+            minLength: 2
+            maxLength: 100
+      responses:
+        '200':
+          description: Найденные места
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlaceList'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/places/{id}:
+    get:
+      tags: [places]
+      operationId: getPlace
+      summary: Одно место справочника
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Место
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Place'
         default:
           $ref: '#/components/responses/Problem'
 
@@ -121,6 +171,45 @@ components:
           type: boolean
         generation:
           type: boolean
+
+    Place:
+      type: object
+      additionalProperties: false
+      description: Справочное место; координаты и часовой пояс берёт сервер по `id`, клиент их не присылает
+      required: [id, name, country, latitude, longitude, timezone]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+          description: Название на русском
+        region:
+          type: string
+          description: Регион или область, если есть
+        country:
+          type: string
+        latitude:
+          type: number
+          minimum: -90
+          maximum: 90
+        longitude:
+          type: number
+          minimum: -180
+          maximum: 180
+        timezone:
+          type: string
+          description: IANA, например Europe/Moscow
+
+    PlaceList:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 20
+          items:
+            $ref: '#/components/schemas/Place'
 
     Problem:
       type: object

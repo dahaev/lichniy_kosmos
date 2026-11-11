@@ -18,7 +18,7 @@ const props = defineProps<{
 }>()
 
 const plate = computed(() => plates[props.composition.plate])
-const top = computed(() => plate.value.groundTop ?? plate.value.horizonY)
+const top = computed(() => plate.value.groundTop)
 
 const bandStyle = computed(() => ({ height: `${String((plate.value.height - top.value) * props.frame.scale)}px` }))
 

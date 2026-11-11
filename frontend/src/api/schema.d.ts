@@ -55,6 +55,44 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/places": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Поиск населённого пункта по началу названия
+         * @description Публичный, с лимитом частоты (§15.2). Сортировка по совпадению и
+         *     населению; не больше 20 мест. Пустой список — не ошибка.
+         */
+        get: operations["searchPlaces"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/places/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Одно место справочника */
+        get: operations["getPlace"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -81,6 +119,22 @@ export interface components {
             code_login: boolean;
             email_login: boolean;
             generation: boolean;
+        };
+        /** @description Справочное место; координаты и часовой пояс берёт сервер по `id`, клиент их не присылает */
+        Place: {
+            id: string;
+            /** @description Название на русском */
+            name: string;
+            /** @description Регион или область, если есть */
+            region?: string;
+            country: string;
+            latitude: number;
+            longitude: number;
+            /** @description IANA, например Europe/Moscow */
+            timezone: string;
+        };
+        PlaceList: {
+            items: components["schemas"]["Place"][];
         };
         Problem: {
             type: string;
@@ -184,6 +238,53 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PublicConfig"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    searchPlaces: {
+        parameters: {
+            query: {
+                /** @description Начало названия, от 2 символов после обрезки пробелов */
+                q: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Найденные места */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlaceList"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getPlace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Место */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Place"];
                 };
             };
             default: components["responses"]["Problem"];

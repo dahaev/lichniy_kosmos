@@ -1,6 +1,9 @@
-import { describe, expect, it } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
+import { beforeEach, describe, expect, it } from 'vitest'
 import { createMemoryHistory } from 'vue-router'
 
+import { useIntakeDraft } from '@/features/intake/draft'
+import { sceneOf } from '@/features/intake/guard'
 import { compositionNames } from '@/scene/compositions'
 
 import { createAppRouter, documentTitle, isFirstNavigation } from './router'
@@ -28,6 +31,11 @@ const screenPaths: [string, string][] = [
 ]
 
 describe('router', () => {
+  beforeEach(() => {
+    sessionStorage.clear()
+    setActivePinia(createPinia())
+  })
+
   it.each(screenPaths)('%s resolves to %s', (path, screen) => {
     const router = createAppRouter(createMemoryHistory())
     expect(router.resolve(path).meta.screen).toBe(screen)
@@ -49,5 +57,28 @@ describe('router', () => {
     await router.push('/create')
     expect(document.title).toBe(documentTitle('Анкета рождения'))
     expect(isFirstNavigation(router)).toBe(false)
+  })
+
+  it('addresses intake steps by query and never opens one past the first unanswered question', async () => {
+    const router = createAppRouter(createMemoryHistory())
+
+    await router.push('/create')
+    expect(router.currentRoute.value.fullPath).toBe('/create?step=name')
+
+    await router.push('/create?step=time')
+    expect(router.currentRoute.value.query.step).toBe('name')
+
+    useIntakeDraft().draft.name = 'Анна'
+    await router.push('/create?step=time')
+    expect(router.currentRoute.value.query.step).toBe('date')
+
+    await router.push('/create?step=nonsense')
+    expect(router.currentRoute.value.query.step).toBe('name')
+  })
+
+  it('gives each intake step its own scene frame', () => {
+    const router = createAppRouter(createMemoryHistory())
+    expect(sceneOf(router.resolve('/create?step=place'))).toBe('intake.place')
+    expect(sceneOf(router.resolve('/'))).toBe('hero')
   })
 })

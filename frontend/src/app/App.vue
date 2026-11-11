@@ -3,12 +3,14 @@ import { AnimatePresence, MotionConfig } from 'motion-v'
 import { defineAsyncComponent, onMounted, watch } from 'vue'
 import { RouterView, useRoute } from 'vue-router'
 
+import { sceneOf } from '@/features/intake/guard'
 import CosmosCanvas from '@/scene/CosmosCanvas.vue'
 import { isDeterministicScene } from '@/scene/deterministic'
 import { useSceneStore } from '@/scene/sceneStore'
 import SkipLink from '@/ui/SkipLink.vue'
 
 import RouteAnnouncer from './RouteAnnouncer.vue'
+import { preloadIntake } from './routes'
 import { useRuntimeConfig } from './runtimeConfig'
 
 const route = useRoute()
@@ -21,7 +23,7 @@ const DevPanel =
     : null
 
 watch(
-  () => route.meta.scene,
+  () => sceneOf(route),
   (name) => {
     scene.compose(name)
   },
@@ -30,6 +32,9 @@ watch(
 
 onMounted(() => {
   void runtime.load()
+  // Safari has no requestIdleCallback.
+  if ('requestIdleCallback' in window) window.requestIdleCallback(() => void preloadIntake())
+  else setTimeout(() => void preloadIntake(), 1500)
 })
 </script>
 

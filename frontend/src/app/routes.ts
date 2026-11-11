@@ -14,6 +14,9 @@ declare module 'vue-router' {
 }
 
 const HomeView = () => import('@/features/home/HomeView.vue')
+const IntakeView = () => import('@/features/intake/IntakeView.vue')
+/** Loaded while the visitor reads the hero, so the intake never mounts mid-flight from the network. */
+export const preloadIntake = IntakeView
 const StubView = () => import('./views/StubView.vue')
 const NotFoundView = () => import('./views/NotFoundView.vue')
 
@@ -23,7 +26,8 @@ const NotFoundView = () => import('./views/NotFoundView.vue')
  */
 export const routes: RouteRecordRaw[] = [
   { path: '/', name: 'home', component: HomeView, meta: { screen: 'SCR-01', title: 'Главная', scene: 'hero', slice: 'V1' } },
-  { path: '/create', name: 'create', component: StubView, meta: { screen: 'SCR-02', title: 'Анкета рождения', scene: 'intake', slice: 'V1–V2' } },
+  // The step lives in ?step= (decision 21); its frame comes from sceneOf().
+  { path: '/create', name: 'create', component: IntakeView, meta: { screen: 'SCR-02', title: 'Анкета рождения', scene: 'intake.name', slice: 'V1.2' } },
   { path: '/create/review', name: 'create-review', component: StubView, meta: { screen: 'SCR-03', title: 'Проверка данных', scene: 'review', slice: 'V2' } },
   { path: '/create/access', name: 'create-access', component: StubView, meta: { screen: 'SCR-04', title: 'Доступ к разбору', scene: 'access', slice: '5' } },
   { path: '/create/consent', name: 'create-consent', component: StubView, meta: { screen: 'SCR-05', title: 'Подтверждение', scene: 'access', slice: '6' } },

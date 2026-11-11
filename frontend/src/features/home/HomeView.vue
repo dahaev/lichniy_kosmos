@@ -5,7 +5,8 @@ import { RouterLink, useRouter } from 'vue-router'
 
 import { isFirstNavigation } from '@/app/router'
 import { useRouteFocus } from '@/app/useRouteFocus'
-import { routeFade } from '@/motion/presets'
+import { heroExit, heroReturn, routeFade } from '@/motion/presets'
+import { compositions } from '@/scene/compositions'
 import { plates } from '@/scene/plates'
 import SceneGround from '@/scene/SceneGround.vue'
 import { useSceneStore } from '@/scene/sceneStore'
@@ -24,19 +25,24 @@ import MotionToggle from './MotionToggle.vue'
 const heading = useTemplateRef<HTMLElement>('heading')
 useRouteFocus(heading)
 
-// On the first load M01 is the only entrance; a route fade on top would delay the heading.
-const routeInitial = isFirstNavigation(useRouter()) ? false : routeFade.initial
+// M01 is the entrance of the first visit only, with no route fade on top to
+// delay the heading. Later visits come back calmly as one layer (heroReturn).
+const firstVisit = isFirstNavigation(useRouter())
+const routeInitial = firstVisit ? false : heroReturn.initial
+const routeAnimate = firstVisit ? routeFade.animate : heroReturn.animate
 
 const scene = useSceneStore()
 
 // Portrait (owner decision, variant B): the horizon band closes the page and
 // the infinity caption and the strip sit on it; --ground-water is its
-// waterline from the top of the band.
+// waterline from the top of the band. Read from the hero composition, not
+// the active one: while the hero leaves, the camera already flies on.
 const ground = computed(() => {
-  const { frame, active } = scene
-  const plate = plates[active.plate]
-  if (!frame || active.ground !== 'page' || plate.groundTop === null) return null
-  return { frame, composition: active, water: (plate.horizonY - plate.groundTop) * frame.scale }
+  const composition = compositions.hero[scene.orientation]
+  const frame = scene.frameFor('hero')
+  const plate = plates[composition.plate]
+  if (!frame || composition.ground !== 'page') return null
+  return { frame, composition, water: (plate.horizonY - plate.groundTop) * frame.scale }
 })
 </script>
 
@@ -44,10 +50,10 @@ const ground = computed(() => {
   <motion.main
     id="main"
     class="home"
-    :class="{ 'home--ground': ground }"
+    :class="{ 'home--ground': ground, 'home--return': !firstVisit }"
     :initial="routeInitial"
-    :animate="routeFade.animate"
-    :exit="routeFade.exit"
+    :animate="routeAnimate"
+    :exit="heroExit"
   >
     <section class="hero" aria-labelledby="hero-title">
       <div class="hero__copy">
@@ -744,11 +750,37 @@ const ground = computed(() => {
   }
 }
 
+/*
+ * Return visit: no M01. The copy arrives with the main layer; captions tied
+ * to the planet wait until the camera is home (1200 ms), so they never float
+ * beside a planet still in flight.
+ */
+.home--return [data-hero-part] {
+  animation: none;
+}
+
+.home--return [data-hero-ambient] {
+  animation: hero-part-fade 400ms var(--cosmos-ease-out) 1000ms both;
+}
+
+/* The strip holds the pause control: keyboard focus never lands on an invisible button. */
+.home--return [data-hero-ambient]:focus-within {
+  animation: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   [data-hero-part],
   [data-hero-ambient] {
     animation: hero-part-fade 200ms linear both;
     animation-delay: 0ms;
+  }
+
+  .home--return [data-hero-part] {
+    animation: none;
+  }
+
+  .home--return [data-hero-ambient] {
+    animation: hero-part-fade 200ms linear both;
   }
 }
 </style>
