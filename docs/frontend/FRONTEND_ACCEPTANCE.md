@@ -1,7 +1,7 @@
 # Личный космос 2.0 — FRONTEND_ACCEPTANCE v1
 
 ## Перед сдачей каждого UI-экрана
-- Скриншоты 1440×900 и 390×844 в согласованных состояниях, сравнение с `references/hero-approved-source.png` на уровне визуального языка.
+- Скриншоты 1440×900 и 390×844 в согласованных состояниях, сравнение с `docs/frontend/references/hero-approved.png` на уровне визуального языка.
 - Работающие кнопки, маршруты, авторизационные redirect, ошибки, loading/empty/success и навигация браузера.
 - Keyboard tab order, focus visible, screen reader labels, reduced motion, zoom 200%.
 - Без горизонтального скролла и перекрытия важных CTA космическими объектами.

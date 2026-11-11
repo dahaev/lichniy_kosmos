@@ -1,0 +1,23 @@
+{
+  "name": "lichniy-kosmos-e2e",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "test": "playwright test --project=smoke",
+    "visual": "node visual/derive-reference.mjs && playwright test --project=visual && node visual/compare.mjs",
+    "reference": "node visual/derive-reference.mjs",
+    "typecheck": "tsc --noEmit",
+    "install-browsers": "playwright install chromium"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.0",
+    "@types/node": "^24.19.2",
+    "@types/pngjs": "^6.0.5",
+    "pixelmatch": "^8.0.0",
+    "pngjs": "^7.0.0",
+    "typescript": "~5.9.3"
+  }
+}

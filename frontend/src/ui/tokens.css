@@ -1,0 +1,71 @@
+/*
+ * Design tokens — Личный космос 2.0.
+ *
+ * Colour, radius and layout values are copied verbatim from
+ * docs/frontend/DESIGN_SYSTEM.md §4 (initial calibration, not measurements).
+ * Typography follows §5; motion follows docs/frontend/MOTION_SPEC.md §3.
+ * Values are recalibrated against hero-approved.png in slice V1 and changed
+ * only with owner approval. src/motion/tokens.ts mirrors the motion block
+ * (kept in sync by src/motion/tokens.spec.ts).
+ */
+
+:root {
+  /* DESIGN_SYSTEM §4 */
+  --cosmos-bg: #07111d;
+  --cosmos-bg-raised: #0d1925;
+  --cosmos-surface: #111e2a;
+  --cosmos-text: #eee9df;
+  --cosmos-muted: #aeb7bd;
+  --cosmos-faint: #798794;
+  --cosmos-gold: #c8aa77;
+  --cosmos-gold-light: #e3c994;
+  --cosmos-line: rgba(225, 218, 207, .15);
+  --cosmos-focus: #e3c994;
+  --cosmos-danger: #e3a19a;
+  --cosmos-radius-sm: 4px;
+  --cosmos-radius-md: 10px;
+  --cosmos-max-content: 1440px;
+  --cosmos-page-gutter: clamp(20px, 5.5vw, 100px);
+
+  /*
+   * DESIGN_SYSTEM §5. Families are hypotheses from §5; licensed font files
+   * are not chosen yet (§10), so system fallbacks render until V1.
+   */
+  --cosmos-font-sans: "Manrope", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --cosmos-font-serif: "Cormorant Garamond", "Iowan Old Style", Georgia, serif;
+  --cosmos-text-body: 1rem;
+  --cosmos-text-body-lg: 1.125rem;
+  --cosmos-text-hero: clamp(60px, 6.4vw, 112px);
+  --cosmos-text-hero-mobile: clamp(42px, 11vw, 72px);
+  --cosmos-tracking-micro: 0.18em;
+
+  /* DESIGN_SYSTEM §8 */
+  --cosmos-target-min: 44px;
+
+  /*
+   * MOTION_SPEC §3. Durations are starting points inside the spec ranges;
+   * curves are the strong ease-out / ease-in-out from emil-design-eng.
+   */
+  --cosmos-dur-micro: 160ms;
+  --cosmos-dur-step: 400ms;
+  --cosmos-dur-route: 700ms;
+  --cosmos-dur-camera: 1200ms;
+  --cosmos-dur-reveal: 2400ms;
+  --cosmos-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --cosmos-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+
+  /* Layers */
+  --cosmos-z-scene: 0;
+  --cosmos-z-content: 1;
+  --cosmos-z-overlay: 10;
+  --cosmos-z-skip-link: 100;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --cosmos-dur-step: 200ms;
+    --cosmos-dur-route: 200ms;
+    --cosmos-dur-camera: 0ms;
+    --cosmos-dur-reveal: 0ms;
+  }
+}

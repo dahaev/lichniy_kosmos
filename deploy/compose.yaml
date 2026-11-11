@@ -1,0 +1,67 @@
+# Production topology (ARCHITECTURE_MVP_v2 §20): one VPS, caddy + app + postgres.
+# Values come from an env file on the server (chmod 600), never from Git.
+# Not used locally and not deployed anywhere in S0.
+name: cosmos
+
+services:
+  web:
+    image: ${COSMOS_WEB_IMAGE:?set COSMOS_WEB_IMAGE}
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      COSMOS_DOMAIN: ${COSMOS_DOMAIN:?set COSMOS_DOMAIN}
+      COSMOS_ACME_EMAIL: ${COSMOS_ACME_EMAIL:?set COSMOS_ACME_EMAIL}
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      app:
+        condition: service_started
+
+  app:
+    image: ${COSMOS_APP_IMAGE:?set COSMOS_APP_IMAGE}
+    restart: unless-stopped
+    command: ["serve"]
+    read_only: true
+    environment:
+      COSMOS_ENV: production
+      COSMOS_HTTP_ADDR: ":8080"
+      COSMOS_DATABASE_URL: ${COSMOS_DATABASE_URL:?set COSMOS_DATABASE_URL}
+      COSMOS_LOG_FORMAT: json
+    stop_grace_period: 2m
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  migrate:
+    image: ${COSMOS_APP_IMAGE:?set COSMOS_APP_IMAGE}
+    command: ["migrate", "up"]
+    profiles: ["ops"]
+    environment:
+      COSMOS_ENV: production
+      COSMOS_DATABASE_URL: ${COSMOS_DATABASE_URL:?set COSMOS_DATABASE_URL}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${COSMOS_DB_USER:?set COSMOS_DB_USER}
+      POSTGRES_PASSWORD: ${COSMOS_DB_PASSWORD:?set COSMOS_DB_PASSWORD}
+      POSTGRES_DB: ${COSMOS_DB_NAME:?set COSMOS_DB_NAME}
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  caddy-data:
+  caddy-config:
+  pgdata:

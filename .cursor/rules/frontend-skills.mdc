@@ -1,0 +1,38 @@
+---
+description: Когда и как применять установленные skills frontend-design, ui-ux-pro-max, emil-design-eng, impeccable при работе над интерфейсом, анимацией, 3D-сценой и дизайн-ревью Личного космоса 2.0
+globs: frontend/**,docs/frontend/**,e2e/**,assets-src/**
+alwaysApply: false
+---
+
+# Frontend skills
+
+Skills лежат в `.agents/skills/<name>/`. Не полагайся на автоподключение: перед использованием **прочитай `SKILL.md` по пути**. Не придумывай команды — только перечисленные здесь или в самом skill.
+
+## Приоритет
+1. `hero-approved.png` (эталон первого экрана) и `docs/PROJECT_DECISIONS.md`.
+2. SCREEN_SPEC_MVP_v2, DESIGN_SYSTEM, MOTION_SPEC, FRONTEND_ACCEPTANCE.
+3. Советы skills. Совет skill'а, противоречащий п. 1–2, не применяется; противоречие записывается в журнал экрана `docs/frontend/screens/SCR-XX.md` (см. ARCHITECTURE_MVP_v2 §1.1, C10–C17).
+
+## Какой skill когда
+| Задача | Skill | Как |
+|---|---|---|
+| Любой визуальный экран: план и сборка | `frontend-design` | Проход 1: токены + ASCII-каркас по viewport + сверка с брифом. Проход 2: сборка. Анти-шаблоны — проверка, а не повод менять элементы эталона |
+| UX, типографика, компоненты, адаптивность, доступность, дизайн-система | `ui-ux-pro-max` | `python3 .agents/skills/ui-ux-pro-max/scripts/search.py "<запрос>" --domain <ux\|typography\|color\|landing\|web>`; стек: `--stack vue`, для сцены `--stack threejs`; чек-листы `references/quick-reference.md`, `references/pro-rules.md` |
+| Motion, переходы, сцены, микровзаимодействия | `emil-design-eng` | Фреймворк решений об анимации, easing и длительности; ревью — только таблица Before / After / Why |
+| Независимое ревью и полировка | `impeccable` | `critique` → `polish`; точечно `typeset`, `layout`, `adapt`, `harden`, `clarify`, `optimize`, `audit`. Перед любой правкой UI — `reference/craft-floor.md` |
+
+## impeccable: фактическое состояние
+- Обёртка: `.agents/skills/impeccable/scripts/impeccable`. Движок 0.1.22 **не установлен** (нужны сеть и `~/.impeccable`). Не скачивай его без разрешения владельца (Q17).
+- Без движка `context` / `detect` / `comp-spec` / `comp-diff` / `critique-storage` не работают: используй справочники `reference/*.md` вручную и пометь отчёт critique как DEGRADED.
+- Critique — двумя изолированными подагентами без контекста автора; иначе DEGRADED, это не приёмка.
+- `DESIGN.md` — производный документ, нормативен DESIGN_SYSTEM.md.
+
+## Запрещено без явного запроса владельца
+- `impeccable`: `new-work` / `shape` с бросанием нового направления, `bolder`, `overdrive`, `generate`, `live` с альтернативными мирами.
+- `ui-ux-pro-max`: `--persist`, `--output-dir` (второй источник истины), домены `gsap` и `react`.
+- GSAP и копирование React-примеров Emil: переноси принципы на `motion-v` и CSS.
+- Правило «< 300 мс» из `emil-design-eng` — только для элементов управления; сцены и переходы следуют MOTION_SPEC.
+- Использовать `hero-approved.png` как production-ассет.
+
+## Пример
+Экран SCR-02, шаг даты: прочитать SCREEN_SPEC SCR-02 → `search.py "date input mobile keyboard" --domain ux` и `--stack vue` → план `frontend-design` → сборка → motion по `emil-design-eng` → снимки и сравнение → `impeccable critique` → `polish`.

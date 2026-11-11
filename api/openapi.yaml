@@ -1,0 +1,177 @@
+openapi: 3.1.0
+info:
+  title: Личный космос 2.0 API
+  version: 0.1.0-s0
+  description: |
+    Контракт frontend/backend — единственный источник истины (ARCHITECTURE_MVP_v2 §15).
+    Срез S0: служебные проверки и публичная конфигурация. Эндпоинты домена
+    добавляются в контракт до реализации и до MSW-моков (§16.6).
+
+    Ошибки — application/problem+json (RFC 9457) со стабильным полем `code`.
+servers:
+  - url: /
+tags:
+  - name: ops
+    description: Проверки живости и готовности
+  - name: config
+    description: Публичная конфигурация клиента
+
+paths:
+  /healthz:
+    get:
+      tags: [ops]
+      operationId: getHealth
+      summary: Живость процесса
+      responses:
+        '200':
+          description: Процесс отвечает
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+
+  /readyz:
+    get:
+      tags: [ops]
+      operationId: getReadiness
+      summary: Готовность обслуживать запросы (БД доступна, миграции применены)
+      responses:
+        '200':
+          description: Все проверки пройдены
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Readiness'
+        '503':
+          description: Хотя бы одна проверка не пройдена; подробности только в логах
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Readiness'
+
+  /api/v1/config:
+    get:
+      tags: [config]
+      operationId: getConfig
+      summary: Публичная конфигурация и флаги доступных сценариев
+      responses:
+        '200':
+          description: Текущая конфигурация
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicConfig'
+        default:
+          $ref: '#/components/responses/Problem'
+
+components:
+  responses:
+    Problem:
+      description: Ошибка в формате RFC 9457
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+  schemas:
+    Health:
+      type: object
+      additionalProperties: false
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+
+    Readiness:
+      type: object
+      additionalProperties: false
+      required: [status, checks]
+      properties:
+        status:
+          type: string
+          enum: [ready, not_ready]
+        checks:
+          type: object
+          description: Имя проверки → результат
+          additionalProperties:
+            type: string
+            enum: [ok, fail]
+
+    PublicConfig:
+      type: object
+      additionalProperties: false
+      required: [environment, features]
+      properties:
+        environment:
+          type: string
+          enum: [local, test, staging, production]
+        features:
+          $ref: '#/components/schemas/Features'
+
+    Features:
+      type: object
+      additionalProperties: false
+      description: Какие пользовательские сценарии сервер обслуживает сейчас
+      required: [code_login, email_login, generation]
+      properties:
+        code_login:
+          type: boolean
+        email_login:
+          type: boolean
+        generation:
+          type: boolean
+
+    Problem:
+      type: object
+      additionalProperties: false
+      required: [type, title, status, code]
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+          minimum: 400
+          maximum: 599
+        detail:
+          type: string
+          description: Текст на русском для показа пользователю
+        code:
+          $ref: '#/components/schemas/ErrorCode'
+        request_id:
+          type: string
+        fields:
+          type: object
+          description: Ошибки валидации по полям
+          additionalProperties:
+            type: string
+
+    ErrorCode:
+      type: string
+      description: Стабильный машинный код ошибки (§15.3)
+      enum:
+        - internal_error
+        - validation_failed
+        - place_not_found
+        - birth_time_nonexistent
+        - birth_time_ambiguous
+        - calculation_failed
+        - unauthenticated
+        - not_found
+        - rate_limited
+        - mail_unavailable
+        - otp_invalid
+        - otp_expired
+        - otp_attempts_exceeded
+        - code_malformed
+        - code_invalid
+        - code_bound_to_account
+        - code_claimed_elsewhere
+        - entitlement_used
+        - entitlement_blocked
+        - consent_outdated
+        - idempotency_key_reused
+        - files_not_ready
+        - resume_not_allowed

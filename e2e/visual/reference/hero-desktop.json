@@ -1,0 +1,24 @@
+{
+  "source": "docs/frontend/references/hero-approved.png",
+  "sourceSha256": "3c26fbfd6054a957d01392dec01a34ff6120859ea2bf6229f970b940061d4036",
+  "sourceSize": {
+    "width": 2048,
+    "height": 1268
+  },
+  "frame": {
+    "x": 15,
+    "y": 5,
+    "width": 2032,
+    "height": 1232
+  },
+  "ignore": [
+    {
+      "x": 568,
+      "y": 1166,
+      "width": 913,
+      "height": 66,
+      "reason": "overlay panel of the tool that captured the reference"
+    }
+  ],
+  "note": "Derived frame for comparison only. Do not use as a production asset."
+}
