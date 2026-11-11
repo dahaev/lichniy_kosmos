@@ -1,0 +1,82 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: standard
+  enable:
+    - bodyclose
+    - depguard
+    - errorlint
+    - gocritic
+    - gosec
+    - misspell
+    - noctx
+    - revive
+    - unconvert
+  settings:
+    # Key invariants of ARCHITECTURE_MVP_v2 §5.1a. The full allow-list is
+    # checked by internal/archtest.
+    depguard:
+      rules:
+        astro-is-pure:
+          files: ["**/internal/astro/**"]
+          deny:
+            - pkg: github.com/dahaev/lichniy_kosmos/backend/internal
+              desc: astro is pure computation without project dependencies
+            - pkg: database/sql
+              desc: astro has no I/O
+            - pkg: net/http
+              desc: astro has no I/O
+        generation-does-not-know-orders:
+          files: ["**/internal/generation/**"]
+          deny:
+            - pkg: github.com/dahaev/lichniy_kosmos/backend/internal/orders
+              desc: orders passes a JobInput snapshot; generation never reads orders
+            - pkg: github.com/dahaev/lichniy_kosmos/backend/internal/access
+              desc: use the EntitlementGuard port wired in app
+            - pkg: github.com/dahaev/lichniy_kosmos/backend/internal/results
+              desc: results sits above generation
+        access-does-not-know-orders:
+          files: ["**/internal/access/**"]
+          deny:
+            - pkg: github.com/dahaev/lichniy_kosmos/backend/internal/orders
+              desc: orders calls access.Consume; access stores consumed_order_id itself
+        artifacts-take-plain-inputs:
+          files: ["**/internal/artifacts/**"]
+          deny:
+            - pkg: github.com/dahaev/lichniy_kosmos/backend/internal/orders
+              desc: results assembles renderer inputs
+            - pkg: github.com/dahaev/lichniy_kosmos/backend/internal/generation
+              desc: results assembles renderer inputs
+            - pkg: github.com/dahaev/lichniy_kosmos/backend/internal/results
+              desc: results sits above artifacts
+        platform-is-infrastructure:
+          files: ["**/internal/platform/**"]
+          allow:
+            - $gostd
+            - github.com/dahaev/lichniy_kosmos/backend/internal/platform
+            - github.com/dahaev/lichniy_kosmos/backend/migrations
+            - github.com/jackc/pgx/v5
+            - github.com/pressly/goose/v3
+    revive:
+      rules:
+        - name: exported
+        - name: package-comments
+  exclusions:
+    presets:
+      - comments
+      - std-error-handling
+    rules:
+      - path: _test\.go
+        linters: [gosec, noctx]
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/dahaev/lichniy_kosmos/backend

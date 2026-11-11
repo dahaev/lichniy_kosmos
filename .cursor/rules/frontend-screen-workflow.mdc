@@ -1,0 +1,31 @@
+---
+description: Обязательный процесс из семи стадий для каждого экрана и сцены Личного космоса 2.0 — от спецификации до приёмки владельцем
+globs: frontend/**,docs/frontend/**,e2e/**,assets-src/**
+alwaysApply: false
+---
+
+# Процесс экрана
+
+Полное описание: `docs/architecture/ARCHITECTURE_MVP_v2.md` §25. Skills — по `frontend-skills.mdc`.
+Каждый экран ведёт журнал `docs/frontend/screens/SCR-XX.md`. Не переходи к следующей стадии, не закрыв артефакт текущей.
+
+| # | Стадия | Skill | Артефакт |
+|---|---|---|---|
+| 0 | Спецификация: SCREEN_SPEC, DESIGN_SYSTEM, MOTION_SPEC, FRONTEND_ACCEPTANCE, эталон; запросы `search.py`; план-проход | `ui-ux-pro-max`, `frontend-design` | Журнал: состояния, каркасы, противоречия |
+| 1 | Интерфейс на токенах, все состояния (loading/empty/error/disabled/focus), адаптивность, доступность | `frontend-design`, `ui-ux-pro-max`, craft-floor `impeccable` | Экран на моках MSW |
+| 2 | Motion по MOTION_SPEC; reduced motion; сцена — через параметры `scene/compositions.ts` | `emil-design-eng` | Motion-таблица в журнале |
+| 3 | Сравнение с эталоном: детерминированные снимки 1440×900, 390×844, 768×1024, 1920×1080; рядом + наложение; опорные точки ±2% viewport | `impeccable comp-spec/comp-diff` (если есть движок) или стенд `make visual` (`e2e/visual/`, результат в `e2e/visual/output/`) | `e2e/visual/`, отклонения в журнале |
+| 4 | Независимое ревью: critique двумя изолированными подагентами + детектор; motion-ревью Before / After / Why | `impeccable`, `emil-design-eng` | Снимок в `.impeccable/critique/` |
+| 5 | Исправления по снимку critique | `impeccable polish` и точечные команды | Закрытый снимок critique |
+| 6 | Тесты и приёмка: Vitest, Playwright E2E, axe, клавиатура, reduced motion, fallback без WebGL, бюджеты; демонстрация владельцу | — | «Утверждено владельцем» с датой |
+
+## Инварианты
+- Текст — только DOM, никогда не в canvas. Анимируются `transform`, `opacity`, `filter`, `clip-path`.
+- Анимация не блокирует ввод; фокус переносится в начале перехода.
+- Реальные статусы сервера не подменяются анимацией; процентов прогресса нет.
+- Моки соответствуют `api/openapi.yaml`; эндпоинт сначала появляется в контракте.
+- Фикстуры и снимки — только синтетические данные; реальных кодов и данных клиентов нет.
+- Эталон `hero-approved.png` не редактируется; для сравнения — производный кадр без рамки и нижней панели.
+
+## Definition of Done
+Все состояния есть; стадии 0–6 закрыты; critique не DEGRADED и без P0/P1; E2E, axe, reduced motion, fallback и бюджеты зелёные; отклонения от эталона приняты; для V1, V2, V3, 11 и 12 — утверждение владельца. Зелёные тесты без утверждения не означают готовность.

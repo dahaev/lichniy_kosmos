@@ -1,0 +1,17 @@
+* text=auto eol=lf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+*.png binary
+*.jpg binary
+*.webp binary
+*.avif binary
+*.woff2 binary
+
+# Source art (Blender, PSD, raw renders) goes to Git LFS (ARCHITECTURE_MVP_v2 §17.2c).
+# Requires `git lfs install` on every machine before the first commit into assets-src/.
+assets-src/**/*.blend filter=lfs diff=lfs merge=lfs -text
+assets-src/**/*.psd filter=lfs diff=lfs merge=lfs -text
+assets-src/**/*.exr filter=lfs diff=lfs merge=lfs -text
+assets-src/**/*.png filter=lfs diff=lfs merge=lfs -text
+assets-src/**/*.tif filter=lfs diff=lfs merge=lfs -text

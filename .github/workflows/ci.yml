@@ -1,0 +1,121 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GOLANGCI_LINT_VERSION: v2.15.0
+  NODE_VERSION: '24'
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: cosmos
+          POSTGRES_PASSWORD: cosmos
+          POSTGRES_DB: cosmos_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U cosmos -d cosmos_test"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      # Throwaway CI-only database; not a secret.
+      COSMOS_TEST_DATABASE_URL: postgres://cosmos:cosmos@127.0.0.1:5432/cosmos_test?sslmode=disable
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: ${{ env.GOLANGCI_LINT_VERSION }}
+          working-directory: backend
+      - name: go vet
+        working-directory: backend
+        run: go vet ./...
+      - name: tests (unit + PostgreSQL integration)
+        working-directory: backend
+        run: go test -race -count=1 ./...
+      - name: govulncheck
+        working-directory: backend
+        run: go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+      - name: build
+        working-directory: backend
+        run: CGO_ENABLED=0 go build -trimpath -o /tmp/cosmos ./cmd/cosmos
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - name: generated API types are up to date
+        run: npm run gen:api && git diff --exit-code -- src/api/schema.d.ts
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm run test
+      - run: npm run build
+      - name: no mock code in the production bundle
+        run: npm run check:bundle
+      - name: production dependency audit
+        run: npm audit --omit=dev --audit-level=moderate
+
+  e2e:
+    runs-on: ubuntu-latest
+    needs: frontend
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            e2e/package-lock.json
+      - run: npm ci
+        working-directory: frontend
+      - run: npm ci
+        working-directory: e2e
+      - run: npx playwright install --with-deps chromium
+        working-directory: e2e
+      - run: npm run typecheck
+        working-directory: e2e
+      - name: smoke
+        run: npm test
+        working-directory: e2e
+      - name: visual stand (report only)
+        run: npm run visual
+        working-directory: e2e
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: e2e-artifacts
+          path: |
+            e2e/playwright-report/
+            e2e/test-results/
+            e2e/visual/output/
+          if-no-files-found: ignore
+          retention-days: 7

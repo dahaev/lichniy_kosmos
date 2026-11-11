@@ -1,0 +1,37 @@
+# Production edge for Личный космос 2.0 (ARCHITECTURE_MVP_v2 §16.5, §18, §20).
+# COSMOS_DOMAIN comes from the server environment. Nothing here touches the
+# legacy site: its domain and DNS are managed separately (§26).
+{
+	email {$COSMOS_ACME_EMAIL}
+}
+
+{$COSMOS_DOMAIN} {
+	encode zstd gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+		-Server
+	}
+
+	@api path /api/* /healthz /readyz
+	handle @api {
+		reverse_proxy app:8080
+	}
+
+	handle {
+		root * /srv
+
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+
+		@html path / /index.html
+		header @html Cache-Control "no-cache"
+
+		try_files {path} /index.html
+		file_server
+	}
+}

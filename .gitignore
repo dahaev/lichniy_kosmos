@@ -14,6 +14,22 @@
 coverage.out
 vendor/
 
+# Node / frontend
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+# E2E and visual stand
+e2e/visual/output/
+e2e/visual/reference/*.png
+e2e/test-results/
+e2e/playwright-report/
+
+# impeccable local state (engine home and live sessions)
+.impeccable-home/
+.impeccable/live/
+
 # IDE local state
 .idea/workspace.xml
 .idea/shelf/
