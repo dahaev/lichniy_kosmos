@@ -19,6 +19,13 @@
   --cosmos-faint: #798794;
   --cosmos-gold: #c8aa77;
   --cosmos-gold-light: #e3c994;
+  /*
+   * V1.1 calibration, pending owner approval: the accent line and the
+   * eyebrow star of hero-approved.png are paler than --cosmos-gold
+   * (stroke average #c7b493, highlights #d3c7b3).
+   */
+  --cosmos-gold-pale: #cfbd9b;
+  --cosmos-ink: #2f2c28;
   --cosmos-line: rgba(225, 218, 207, .15);
   --cosmos-focus: #e3c994;
   --cosmos-danger: #e3a19a;
@@ -28,10 +35,10 @@
   --cosmos-page-gutter: clamp(20px, 5.5vw, 100px);
 
   /*
-   * DESIGN_SYSTEM §5. Families are hypotheses from §5; licensed font files
-   * are not chosen yet (§10), so system fallbacks render until V1.
+   * DESIGN_SYSTEM §5. Manrope and Cormorant Garamond are self-hosted from
+   * @fontsource (SIL OFL 1.1); the final choice stays open in §10.
    */
-  --cosmos-font-sans: "Manrope", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --cosmos-font-sans: "Manrope Variable", "Manrope", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --cosmos-font-serif: "Cormorant Garamond", "Iowan Old Style", Georgia, serif;
   --cosmos-text-body: 1rem;
   --cosmos-text-body-lg: 1.125rem;

@@ -1,0 +1,26 @@
+{
+  "$comment": "Input of frontend/scripts/build-scene-plates.mjs. Coordinates are master pixels; planet and horizon were measured on the masters (see SCR-01 journal). groundTop is the row where the sky gives way to haze, mountains and water; where the page owns the ground, the scene fades the plate out above it.",
+  "plates": [
+    {
+      "id": "hero-landscape",
+      "master": "hero-landscape.temp-not-for-production.jpg",
+      "temporary": true,
+      "pad": { "left": 160, "right": 24, "top": 0, "bottom": 176 },
+      "planet": { "x": 987, "y": 259.5, "r": 265 },
+      "horizonY": 650,
+      "widths": [1024, 1464],
+      "grade": { "lift": 1.0, "warm": { "x": 1150, "y": 470, "radius": 520, "strength": 0.0 } }
+    },
+    {
+      "id": "hero-portrait",
+      "master": "hero-portrait.temp-not-for-production.jpg",
+      "temporary": true,
+      "pad": { "left": 0, "right": 0, "top": 0, "bottom": 0 },
+      "planet": { "x": 433, "y": 297, "r": 283 },
+      "horizonY": 1200,
+      "groundTop": 820,
+      "widths": [540, 720],
+      "grade": { "lift": 1.0, "warm": { "x": 600, "y": 520, "radius": 420, "strength": 0.0 } }
+    }
+  ]
+}

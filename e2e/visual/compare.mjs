@@ -14,7 +14,7 @@ const meta = JSON.parse(readFileSync('visual/reference/hero-desktop.json', 'utf8
 
 // The reference is a desktop frame; narrow viewports get no pixel comparison
 // until per-viewport references are approved (see S0 report).
-const compared = ['desktop-1440', 'wide-1920']
+const compared = ['reference-1440', 'desktop-1440', 'wide-1920']
 const summary = []
 
 for (const name of compared) {
@@ -59,5 +59,28 @@ for (const name of compared) {
   summary.push({ name, compared: `${area.width}x${height}`, mismatchedPixels: mismatched, mismatchRatio: Number(ratio.toFixed(4)) })
 }
 
-writeFileSync(`${OUT}/summary.json`, `${JSON.stringify(summary, null, 2)}\n`)
 console.table(summary)
+
+// Anchors are compared only in the exact reference frame: other viewports
+// follow the layout model, not a scaled copy of the picture.
+const anchorRef = JSON.parse(readFileSync('visual/reference/hero-anchors.json', 'utf8'))
+const anchorFile = `${OUT}/snapshots/reference-1440.anchors.json`
+const anchors = []
+if (existsSync(anchorFile)) {
+  const measured = JSON.parse(readFileSync(anchorFile, 'utf8'))
+  const { width, height } = anchorRef.viewport
+  for (const [name, { axis, value }] of Object.entries(anchorRef.anchors)) {
+    const actual = measured[name]
+    const tolerance = (axis === 'x' ? width : height) * 0.02
+    const delta = actual - value
+    anchors.push({ name, reference: value, actual: Number(actual.toFixed(1)), delta: Number(delta.toFixed(1)), tolerance: Number(tolerance.toFixed(1)), ok: Math.abs(delta) <= tolerance })
+  }
+  console.table(anchors)
+}
+
+writeFileSync(`${OUT}/summary.json`, `${JSON.stringify({ pixels: summary, anchors }, null, 2)}\n`)
+const failed = anchors.filter((a) => !a.ok)
+if (failed.length > 0) {
+  console.error(`anchors outside tolerance: ${failed.map((a) => a.name).join(', ')}`)
+  process.exitCode = 1
+}
