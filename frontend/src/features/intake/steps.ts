@@ -25,6 +25,17 @@ export function earlierStep(a: IntakeStep, b: IntakeStep): IntakeStep {
   return stepIndex(a) <= stepIndex(b) ? a : b
 }
 
+/**
+ * «Изменить» on the review opens a step with `?from=review` (SCR-03 C-R3):
+ * confirming the answer goes straight back to the review. The flag names
+ * where to return, never what was entered.
+ */
+export const REVIEW_RETURN = 'review'
+
+export function isReviewEdit(query: Record<string, unknown>): boolean {
+  return query.from === REVIEW_RETURN
+}
+
 /** Each step is its own frame of the scene (SCR-02 §0.2). */
 export function stepScene(step: IntakeStep): CompositionName {
   return `intake.${step}`

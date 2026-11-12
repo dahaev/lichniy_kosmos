@@ -15,19 +15,28 @@ export class ApiProblem extends Error {
   readonly code: ErrorCode | ClientErrorCode
   readonly detail: string | undefined
   readonly requestId: string | undefined
+  /** Validation messages by request field path, e.g. `birth_date` or `time.value`. */
+  readonly fields: Readonly<Record<string, string>> | undefined
 
-  constructor(status: number, code: ErrorCode | ClientErrorCode, detail?: string, requestId?: string, options?: ErrorOptions) {
+  constructor(
+    status: number,
+    code: ErrorCode | ClientErrorCode,
+    detail?: string,
+    requestId?: string,
+    options?: ErrorOptions & { fields?: Record<string, string> | undefined },
+  ) {
     super(detail ?? code, options)
     this.name = 'ApiProblem'
     this.status = status
     this.code = code
     this.detail = detail
     this.requestId = requestId
+    this.fields = options?.fields
   }
 
   static fromResponse(status: number, body: unknown): ApiProblem {
     if (isProblemBody(body)) {
-      return new ApiProblem(status, body.code, body.detail, body.request_id)
+      return new ApiProblem(status, body.code, body.detail, body.request_id, { fields: body.fields })
     }
     return new ApiProblem(status, 'unexpected_response')
   }

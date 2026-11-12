@@ -93,6 +93,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/profile-checks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Проверить анкету без сохранения
+         * @description Публичный, с лимитом частоты (§15.2). Вызывается на `/create/review`
+         *     (§8.3): сервер повторяет правила анкеты, разрешает место по `place_id`
+         *     и проверяет локальное время на переход часов (§12.2). Ничего не
+         *     сохраняет, заказ не создаёт, доступ не расходует.
+         *
+         *     Нарушение правила значения — `422` с `fields`: ключ — путь поля
+         *     запроса (`name`, `birth_date`, `place_id`, `time.value`, `time.source`,
+         *     `time.accuracy_minutes`), значение — текст на русском для показа у
+         *     поля. `400` — только тело, которое нельзя разобрать: не JSON,
+         *     неизвестные поля, неверная структура.
+         */
+        post: operations["checkProfile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -135,6 +164,46 @@ export interface components {
         };
         PlaceList: {
             items: components["schemas"]["Place"][];
+        };
+        /** @description Анкета рождения (§15.4); координаты и часовой пояс сервер берёт по `place_id` */
+        Profile: {
+            /** @description 1–60 символов Unicode после обрезки пробелов */
+            name: string;
+            /**
+             * Format: date
+             * @description YYYY-MM-DD, от 1900-01-01 до текущей московской даты
+             */
+            birth_date: string;
+            /** @description `Place.id` из справочника */
+            place_id: string;
+            time: components["schemas"]["BirthTime"];
+        };
+        /** @description Явный дискриминатор `kind` вместо пары «время + флаг неизвестности» (§15.4) */
+        BirthTime: components["schemas"]["BirthTimeKnown"] | components["schemas"]["BirthTimeUnknown"];
+        BirthTimeKnown: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "known";
+            /** @description Местное время HH:MM */
+            value: string;
+            /** @enum {string} */
+            source: "document" | "family" | "approximate";
+            /** @enum {integer} */
+            accuracy_minutes: 0 | 15 | 30 | 60;
+        };
+        /** @description Время неизвестно; сервер считает источник `unknown` и погрешность 0 */
+        BirthTimeUnknown: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "unknown";
+        };
+        ProfileCheck: {
+            profile: components["schemas"]["Profile"];
+            place: components["schemas"]["Place"];
         };
         Problem: {
             type: string;
@@ -285,6 +354,62 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Place"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    checkProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Profile"];
+            };
+        };
+        responses: {
+            /** @description Анкета корректна; возвращается нормализованной вместе с местом */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProfileCheck"];
+                };
+            };
+            /** @description Тело не разобрано (`validation_failed`, без `fields`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /**
+             * @description Анкета не прошла проверку. `code`: `validation_failed`,
+             *     `place_not_found` (поле `place_id`), `birth_time_nonexistent` или
+             *     `birth_time_ambiguous` (поле `time.value`).
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Превышен лимит частоты (`rate_limited`) */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
                 };
             };
             default: components["responses"]["Problem"];

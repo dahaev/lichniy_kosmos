@@ -16,7 +16,7 @@ import { stepError, useIntakeDraft } from './draft'
 import { INTAKE_ROUTE } from './guard'
 import NameStep from './NameStep.vue'
 import PlaceStep from './PlaceStep.vue'
-import { intakeSteps, nextStep, parseStep, previousStep, stepIndex, stepScene, type IntakeStep } from './steps'
+import { intakeSteps, isReviewEdit, nextStep, parseStep, previousStep, stepIndex, stepScene, type IntakeStep } from './steps'
 import TimeStep from './TimeStep.vue'
 
 // SCR-02, slice V1.2. The steps share one route (/create?step=); the
@@ -126,8 +126,14 @@ const stepEntrance = computed(() => (arrived.value ? 'step' : 'arrive'))
 const blockExit = computed(() => (reducedMotion.value ? { opacity: 0, transition: { duration: 0.12 } } : stepBlockExit))
 
 const isLast = computed(() => nextStep(step.value) === null)
+/** Opened by «Изменить» on the review (SCR-03 C-R3): the answer returns there. */
+const editing = computed(() => isReviewEdit(route.query))
+/** Forward to the review the column leaves to the left, as a step does (SCR-03 §2). */
+const exitX = ref<number>(intakeExit.x)
+const exitMotion = computed(() => ({ ...intakeExit, x: exitX.value }))
 
 function go(target: { step: IntakeStep } | '/' | '/create/review') {
+  if (target === '/create/review') exitX.value = -intakeExit.x
   const location = typeof target === 'string' ? target : { name: INTAKE_ROUTE, query: { step: target.step } }
   // Back to where the visitor came from keeps the browser history linear.
   const back = router.options.history.state.back
@@ -145,11 +151,15 @@ async function submit() {
     return
   }
   const next = nextStep(current)
-  if (next) go({ step: next })
+  if (next && !editing.value) go({ step: next })
   else go('/create/review')
 }
 
 function back() {
+  if (editing.value) {
+    go('/create/review')
+    return
+  }
   const previous = previousStep(step.value)
   go(previous ? { step: previous } : '/')
 }
@@ -174,7 +184,7 @@ onMounted(async () => {
     :class="{ 'intake--reload': firstLoad }"
     :initial="false"
     :animate="{ opacity: 1 }"
-    :exit="intakeExit"
+    :exit="exitMotion"
     :data-step="step"
     :style="{ '--intake-clear-y': `${clearY}px` }"
   >
@@ -207,7 +217,7 @@ onMounted(async () => {
         </div>
 
         <div class="intake__actions" data-line style="--i: 5">
-          <PrimaryCTA class="intake__next">{{ isLast ? 'Проверить данные' : 'Далее' }}</PrimaryCTA>
+          <PrimaryCTA class="intake__next">{{ isLast || editing ? 'Проверить данные' : 'Далее' }}</PrimaryCTA>
           <button class="intake__back" type="button" @click="back">
             <CosmosIcon class="intake__back-icon" name="arrow-left" />
             <span>Назад</span>

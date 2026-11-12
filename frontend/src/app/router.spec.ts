@@ -76,6 +76,33 @@ describe('router', () => {
     expect(router.currentRoute.value.query.step).toBe('name')
   })
 
+  it('opens the review only for a complete draft, else the first unanswered step in edit mode', async () => {
+    const router = createAppRouter(createMemoryHistory())
+    const { draft } = useIntakeDraft()
+
+    await router.push('/create/review')
+    expect(router.currentRoute.value.fullPath).toBe('/create?step=name&from=review')
+
+    Object.assign(draft, {
+      name: 'Анна',
+      date: { day: '12', month: '03', year: '1990' },
+      place: { query: 'Казань', selected: { id: 'ru-kzn', name: 'Казань', country: 'Россия' } },
+    })
+    await router.push('/create/review')
+    expect(router.currentRoute.value.fullPath).toBe('/create?step=time&from=review')
+
+    Object.assign(draft.time, { kind: 'unknown', source: 'unknown', accuracy: 0 })
+    await router.push('/create/review')
+    expect(router.currentRoute.value.path).toBe('/create/review')
+  })
+
+  it('keeps the edit flag when a step link is corrected', async () => {
+    const router = createAppRouter(createMemoryHistory())
+
+    await router.push('/create?step=time&from=review')
+    expect(router.currentRoute.value.fullPath).toBe('/create?step=name&from=review')
+  })
+
   it('gives each intake step its own scene frame', () => {
     const router = createAppRouter(createMemoryHistory())
     expect(sceneOf(router.resolve('/create?step=place'))).toBe('intake.place')
