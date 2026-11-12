@@ -3,6 +3,7 @@ import { delay, http, HttpResponse } from 'msw'
 import { MOCK_HEADER } from '@/api/client'
 import type { components } from '@/api/schema'
 
+import { accessDetails, createAccessMock } from './access'
 import { publicConfig } from './fixtures'
 import { places, searchPlaces } from './places'
 import { checkProfile } from './profileChecks'
@@ -32,18 +33,50 @@ function profileCheckMode(): string | null {
   return devMode('profile-check')
 }
 
+/**
+ * Session and code login states (SCR-04 §0.3): `?session=code-available`,
+ * `code-consumed`, `slow` or `error`; `?auth-code=slow`, `error` or
+ * `rate-limited`. Codes themselves pick the other states (`access.ts`).
+ */
+function sessionMode(): string | null {
+  return devMode('session')
+}
+
+function authCodeMode(): string | null {
+  return devMode('auth-code')
+}
+
+/** One mock browser session for the whole page; tests call `accessMock.reset()`. */
+export const accessMock = createAccessMock()
+let sessionSeeded = false
+
+function seedSession(): void {
+  if (sessionSeeded) return
+  sessionSeeded = true
+  const mode = sessionMode()
+  if (mode === 'code-available') accessMock.seed('available')
+  if (mode === 'code-consumed') accessMock.seed('consumed')
+}
+
 const statusTitles: Record<number, string> = {
   400: 'Bad Request',
+  403: 'Forbidden',
   404: 'Not Found',
+  409: 'Conflict',
   422: 'Unprocessable Content',
   429: 'Too Many Requests',
   503: 'Service Unavailable',
 }
 
-function problem(status: number, code: Schemas['ErrorCode'], extra: Pick<Schemas['Problem'], 'detail' | 'fields'> = {}) {
+function problem(
+  status: number,
+  code: Schemas['ErrorCode'],
+  extra: Pick<Schemas['Problem'], 'detail' | 'fields'> = {},
+  headers: Record<string, string> = {},
+) {
   return HttpResponse.json<Schemas['Problem']>(
     { type: 'about:blank', title: statusTitles[status] ?? 'Error', status, code, ...extra },
-    { status, headers: { ...mockHeaders, 'content-type': 'application/problem+json' } },
+    { status, headers: { ...mockHeaders, ...headers, 'content-type': 'application/problem+json' } },
   )
 }
 
@@ -95,5 +128,31 @@ export const handlers = [
     const outcome = checkProfile(body, mode)
     if (outcome.status === 200) return HttpResponse.json<Schemas['ProfileCheck']>(outcome.body, { headers: mockHeaders })
     return problem(outcome.status, outcome.code, { detail: outcome.detail, ...(outcome.fields ? { fields: outcome.fields } : {}) })
+  }),
+
+  http.get<never, never, Schemas['Session'] | Schemas['Problem']>('/api/v1/session', async () => {
+    seedSession()
+    const mode = sessionMode()
+    await delay(mode === 'slow' ? 1500 : 80)
+    if (mode === 'error') return problem(503, 'internal_error')
+    return HttpResponse.json<Schemas['Session']>(accessMock.session(), { headers: mockHeaders })
+  }),
+
+  http.post<never, never, Schemas['CodeSession'] | Schemas['Problem']>('/api/v1/auth/code', async ({ request }) => {
+    seedSession()
+    const mode = authCodeMode()
+    await delay(mode === 'slow' ? 1500 : 150)
+    if (mode === 'error') return problem(503, 'internal_error')
+    if (mode === 'rate-limited') return problem(429, 'rate_limited', { detail: accessDetails.rateLimited }, { 'retry-after': '60' })
+    let body: unknown
+    try {
+      body = await request.json()
+    } catch {
+      body = undefined
+    }
+    const outcome = accessMock.login(body)
+    if (outcome.status === 200) return HttpResponse.json<Schemas['CodeSession']>(outcome.body, { headers: mockHeaders })
+    const headers = outcome.retryAfter ? { 'retry-after': String(outcome.retryAfter) } : {}
+    return problem(outcome.status, outcome.code, { detail: outcome.detail }, headers)
   }),
 ]

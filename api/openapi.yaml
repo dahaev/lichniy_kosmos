@@ -1,11 +1,12 @@
 openapi: 3.1.0
 info:
   title: Личный космос 2.0 API
-  version: 0.2.0-v2
+  version: 0.3.0-5
   description: |
     Контракт frontend/backend — единственный источник истины (ARCHITECTURE_MVP_v2 §15).
     Срез S0: служебные проверки и публичная конфигурация; V1.2: места; V2: проверка
-    анкеты (`profile-checks`, пока только MSW-мок). Эндпоинты домена
+    анкеты (`profile-checks`, пока только MSW-мок); 5: сессия и кодовый вход
+    (`session`, `auth/code`, пока только MSW-мок). Эндпоинты домена
     добавляются в контракт до реализации и до MSW-моков (§16.6).
 
     Ошибки — application/problem+json (RFC 9457) со стабильным полем `code`.
@@ -20,6 +21,8 @@ tags:
     description: Справочник мест рождения
   - name: intake
     description: Проверка анкеты рождения
+  - name: auth
+    description: Текущая сессия и кодовый вход
 
 paths:
   /healthz:
@@ -163,6 +166,108 @@ paths:
                 $ref: '#/components/schemas/Problem'
         '429':
           description: Превышен лимит частоты (`rate_limited`)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/session:
+    get:
+      tags: [auth]
+      operationId: getSession
+      summary: Текущий принципал
+      description: |
+        Доступен любому посетителю (§15.2), всегда `200`. Без действующей
+        cookie `__Host-lk_sid` — `anonymous`. Сессия заблокированного или
+        привязанного к аккаунту доступа недействительна (§9.2) — тоже
+        `anonymous`. Код целиком никогда не возвращается, только маска.
+        Вариант `account` добавляется в срезе 7.
+      responses:
+        '200':
+          description: Принципал текущей сессии
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        default:
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/auth/code:
+    post:
+      tags: [auth]
+      operationId: startCodeSession
+      summary: Кодовый вход
+      description: |
+        Публичный, с лимитами попыток на IP и глобально (§10.3, «Перебор
+        кодов»). Сервер нормализует ввод (регистр, пробелы, дефисы, похожие
+        символы) и проверяет префикс, длину и контрольный символ (§10.1).
+        Вход не создаёт заказ и не расходует доступ.
+
+        Действующую сессию другого доступа сервер заменяет только при
+        `replace_session: true`; иначе — `409 session_conflict`. Повтор кода
+        того же доступа — `200` без конфликта. Любая ошибка оставляет
+        текущую сессию без изменений.
+
+        Использованный код даёт кодовую сессию и `order_id`; открыть заказ
+        можно только с этой сессией (§9.5).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CodeLogin'
+      responses:
+        '200':
+          description: Кодовая сессия выдана (или уже действует для этого доступа)
+          headers:
+            Set-Cookie:
+              description: '`__Host-lk_sid`; HttpOnly, Secure, SameSite=Lax, Path=/'
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CodeSession'
+        '400':
+          description: Тело не разобрано (`validation_failed`)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '403':
+          description: Доступ привязан к аккаунту (`code_bound_to_account`)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: |
+            Действует сессия другого доступа, а `replace_session` не `true`
+            (`session_conflict`). Текущая сессия не меняется.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          description: |
+            `code_malformed` — ввод не разбирается как код 2.0, `detail`
+            подсказывает про коды старого сайта (§26); `code_invalid` — единый
+            ответ для неизвестного, не выпущенного, заблокированного кода и
+            кода другого продукта.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '429':
+          description: Превышен лимит попыток (`rate_limited`)
+          headers:
+            Retry-After:
+              description: Через сколько секунд можно повторить
+              schema:
+                type: integer
+                minimum: 1
           content:
             application/problem+json:
               schema:
@@ -338,6 +443,102 @@ components:
         place:
           $ref: '#/components/schemas/Place'
 
+    CodeLogin:
+      type: object
+      additionalProperties: false
+      required: [code]
+      properties:
+        code:
+          type: string
+          minLength: 1
+          maxLength: 64
+          description: Код как введён; нормализует сервер (§10.1)
+        replace_session:
+          type: boolean
+          description: Пользователь явно согласился заменить действующую сессию другого доступа; отсутствие поля равно `false`
+
+    Session:
+      description: Принципал сессии (§9.1)
+      oneOf:
+        - $ref: '#/components/schemas/AnonymousSession'
+        - $ref: '#/components/schemas/CodeSession'
+      discriminator:
+        propertyName: principal
+        mapping:
+          anonymous: '#/components/schemas/AnonymousSession'
+          code: '#/components/schemas/CodeSession'
+
+    AnonymousSession:
+      type: object
+      additionalProperties: false
+      required: [principal]
+      properties:
+        principal:
+          type: string
+          enum: [anonymous]
+
+    CodeSession:
+      type: object
+      additionalProperties: false
+      required: [principal, expires_at, entitlement]
+      properties:
+        principal:
+          type: string
+          enum: [code]
+        expires_at:
+          type: string
+          format: date-time
+        entitlement:
+          $ref: '#/components/schemas/CodeEntitlement'
+
+    CodeEntitlement:
+      description: Доступ кодовой сессии; `order_id` есть только у использованного
+      oneOf:
+        - $ref: '#/components/schemas/CodeEntitlementAvailable'
+        - $ref: '#/components/schemas/CodeEntitlementConsumed'
+      discriminator:
+        propertyName: state
+        mapping:
+          available: '#/components/schemas/CodeEntitlementAvailable'
+          consumed: '#/components/schemas/CodeEntitlementConsumed'
+
+    CodeEntitlementAvailable:
+      type: object
+      additionalProperties: false
+      required: [id, state, code_mask]
+      properties:
+        id:
+          type: string
+          format: uuid
+        state:
+          type: string
+          enum: [available]
+        code_mask:
+          $ref: '#/components/schemas/CodeMask'
+
+    CodeEntitlementConsumed:
+      type: object
+      additionalProperties: false
+      required: [id, state, code_mask, order_id]
+      properties:
+        id:
+          type: string
+          format: uuid
+        state:
+          type: string
+          enum: [consumed]
+        code_mask:
+          $ref: '#/components/schemas/CodeMask'
+        order_id:
+          type: string
+          format: uuid
+          description: Заказ, созданный по этому доступу
+
+    CodeMask:
+      type: string
+      pattern: '^[0-9A-HJKMNP-TV-Z]{4}$'
+      description: Последние 4 символа нормализованного кода (§10.2)
+
     Problem:
       type: object
       additionalProperties: false
@@ -385,6 +586,7 @@ components:
         - code_invalid
         - code_bound_to_account
         - code_claimed_elsewhere
+        - session_conflict
         - entitlement_used
         - entitlement_blocked
         - consent_outdated

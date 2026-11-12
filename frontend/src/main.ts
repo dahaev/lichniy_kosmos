@@ -13,7 +13,8 @@ import './ui/base.css'
 async function enableApiMocks(): Promise<void> {
   if (!import.meta.env.DEV || import.meta.env.VITE_API_MOCKS !== '1') return
   const { worker } = await import('./mocks/browser')
-  await worker.start({ onUnhandledRequest: 'bypass' })
+  // Quiet: MSW otherwise prints every request body, access codes included.
+  await worker.start({ onUnhandledRequest: 'bypass', quiet: true })
 }
 
 async function bootstrap(): Promise<void> {

@@ -122,6 +122,61 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Текущий принципал
+         * @description Доступен любому посетителю (§15.2), всегда `200`. Без действующей
+         *     cookie `__Host-lk_sid` — `anonymous`. Сессия заблокированного или
+         *     привязанного к аккаунту доступа недействительна (§9.2) — тоже
+         *     `anonymous`. Код целиком никогда не возвращается, только маска.
+         *     Вариант `account` добавляется в срезе 7.
+         */
+        get: operations["getSession"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Кодовый вход
+         * @description Публичный, с лимитами попыток на IP и глобально (§10.3, «Перебор
+         *     кодов»). Сервер нормализует ввод (регистр, пробелы, дефисы, похожие
+         *     символы) и проверяет префикс, длину и контрольный символ (§10.1).
+         *     Вход не создаёт заказ и не расходует доступ.
+         *
+         *     Действующую сессию другого доступа сервер заменяет только при
+         *     `replace_session: true`; иначе — `409 session_conflict`. Повтор кода
+         *     того же доступа — `200` без конфликта. Любая ошибка оставляет
+         *     текущую сессию без изменений.
+         *
+         *     Использованный код даёт кодовую сессию и `order_id`; открыть заказ
+         *     можно только с этой сессией (§9.5).
+         */
+        post: operations["startCodeSession"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -205,6 +260,60 @@ export interface components {
             profile: components["schemas"]["Profile"];
             place: components["schemas"]["Place"];
         };
+        CodeLogin: {
+            /** @description Код как введён; нормализует сервер (§10.1) */
+            code: string;
+            /** @description Пользователь явно согласился заменить действующую сессию другого доступа; отсутствие поля равно `false` */
+            replace_session?: boolean;
+        };
+        /** @description Принципал сессии (§9.1) */
+        Session: components["schemas"]["AnonymousSession"] | components["schemas"]["CodeSession"];
+        AnonymousSession: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            principal: "anonymous";
+        };
+        CodeSession: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            principal: "code";
+            /** Format: date-time */
+            expires_at: string;
+            entitlement: components["schemas"]["CodeEntitlement"];
+        };
+        /** @description Доступ кодовой сессии; `order_id` есть только у использованного */
+        CodeEntitlement: components["schemas"]["CodeEntitlementAvailable"] | components["schemas"]["CodeEntitlementConsumed"];
+        CodeEntitlementAvailable: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            state: "available";
+            code_mask: components["schemas"]["CodeMask"];
+        };
+        CodeEntitlementConsumed: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            state: "consumed";
+            code_mask: components["schemas"]["CodeMask"];
+            /**
+             * Format: uuid
+             * @description Заказ, созданный по этому доступу
+             */
+            order_id: string;
+        };
+        /** @description Последние 4 символа нормализованного кода (§10.2) */
+        CodeMask: string;
         Problem: {
             type: string;
             title: string;
@@ -222,7 +331,7 @@ export interface components {
          * @description Стабильный машинный код ошибки (§15.3)
          * @enum {string}
          */
-        ErrorCode: "internal_error" | "validation_failed" | "place_not_found" | "birth_time_nonexistent" | "birth_time_ambiguous" | "calculation_failed" | "unauthenticated" | "not_found" | "rate_limited" | "mail_unavailable" | "otp_invalid" | "otp_expired" | "otp_attempts_exceeded" | "code_malformed" | "code_invalid" | "code_bound_to_account" | "code_claimed_elsewhere" | "entitlement_used" | "entitlement_blocked" | "consent_outdated" | "idempotency_key_reused" | "files_not_ready" | "resume_not_allowed";
+        ErrorCode: "internal_error" | "validation_failed" | "place_not_found" | "birth_time_nonexistent" | "birth_time_ambiguous" | "calculation_failed" | "unauthenticated" | "not_found" | "rate_limited" | "mail_unavailable" | "otp_invalid" | "otp_expired" | "otp_attempts_exceeded" | "code_malformed" | "code_invalid" | "code_bound_to_account" | "code_claimed_elsewhere" | "session_conflict" | "entitlement_used" | "entitlement_blocked" | "consent_outdated" | "idempotency_key_reused" | "files_not_ready" | "resume_not_allowed";
     };
     responses: {
         /** @description Ошибка в формате RFC 9457 */
@@ -406,6 +515,109 @@ export interface operations {
             /** @description Превышен лимит частоты (`rate_limited`) */
             429: {
                 headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Принципал текущей сессии */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Session"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    startCodeSession: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CodeLogin"];
+            };
+        };
+        responses: {
+            /** @description Кодовая сессия выдана (или уже действует для этого доступа) */
+            200: {
+                headers: {
+                    /** @description `__Host-lk_sid`; HttpOnly, Secure, SameSite=Lax, Path=/ */
+                    "Set-Cookie"?: string;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CodeSession"];
+                };
+            };
+            /** @description Тело не разобрано (`validation_failed`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Доступ привязан к аккаунту (`code_bound_to_account`) */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /**
+             * @description Действует сессия другого доступа, а `replace_session` не `true`
+             *     (`session_conflict`). Текущая сессия не меняется.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /**
+             * @description `code_malformed` — ввод не разбирается как код 2.0, `detail`
+             *     подсказывает про коды старого сайта (§26); `code_invalid` — единый
+             *     ответ для неизвестного, не выпущенного, заблокированного кода и
+             *     кода другого продукта.
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Превышен лимит попыток (`rate_limited`) */
+            429: {
+                headers: {
+                    /** @description Через сколько секунд можно повторить */
+                    "Retry-After"?: number;
                     [name: string]: unknown;
                 };
                 content: {

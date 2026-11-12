@@ -412,7 +412,7 @@ stateDiagram-v2
 | `account` | OTP по email | Все доступы аккаунта, привязка кодов, черновики, заказы, файлы |
 | Владелец | Только CLI на сервере | Операции §10.6, §13.8. Нет веб-входа в MVP |
 
-Одна сессия — один принципал. Вход другим способом заменяет текущую сессию (старая отзывается).
+Одна сессия — один принципал. Вход другим способом заменяет текущую сессию (старая отзывается). Кодовый вход при действующей сессии другого доступа заменяет её только при явном согласии (`replace_session: true`), иначе — `409 session_conflict`; любая ошибка входа сохраняет прежнюю сессию (SCR-04, Р-A6, Р-A9).
 
 ### 9.2. Сессии
 
@@ -734,7 +734,7 @@ PDF-движок (Q6, спайк):
 
 ### 15.3. Каталог кодов ошибок (стартовый)
 
-`validation_failed`, `place_not_found`, `birth_time_nonexistent`, `birth_time_ambiguous`, `calculation_failed`, `unauthenticated`, `not_found`, `rate_limited`, `mail_unavailable`, `otp_invalid`, `otp_expired`, `otp_attempts_exceeded`, `code_malformed`, `code_invalid`, `code_bound_to_account`, `code_claimed_elsewhere`, `entitlement_used`, `entitlement_blocked`, `consent_outdated`, `idempotency_key_reused`, `files_not_ready`, `resume_not_allowed`.
+`validation_failed`, `place_not_found`, `birth_time_nonexistent`, `birth_time_ambiguous`, `calculation_failed`, `unauthenticated`, `not_found`, `rate_limited`, `mail_unavailable`, `otp_invalid`, `otp_expired`, `otp_attempts_exceeded`, `code_malformed`, `code_invalid`, `code_bound_to_account`, `code_claimed_elsewhere`, `session_conflict`, `entitlement_used`, `entitlement_blocked`, `consent_outdated`, `idempotency_key_reused`, `files_not_ready`, `resume_not_allowed`.
 
 ### 15.4. Ключевые модели (смысл, не схема)
 
