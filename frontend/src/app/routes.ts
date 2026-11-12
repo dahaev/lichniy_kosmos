@@ -18,6 +18,7 @@ const IntakeView = () => import('@/features/intake/IntakeView.vue')
 /** Loaded while the visitor reads the hero, so the intake never mounts mid-flight from the network. */
 export const preloadIntake = IntakeView
 const ReviewView = () => import('@/features/intake/ReviewView.vue')
+const AccessView = () => import('@/features/access/AccessView.vue')
 const StubView = () => import('./views/StubView.vue')
 const NotFoundView = () => import('./views/NotFoundView.vue')
 
@@ -30,7 +31,7 @@ export const routes: RouteRecordRaw[] = [
   // The step lives in ?step= (decision 21); its frame comes from sceneOf().
   { path: '/create', name: 'create', component: IntakeView, meta: { screen: 'SCR-02', title: 'Анкета рождения', scene: 'intake.name', slice: 'V1.2' } },
   { path: '/create/review', name: 'create-review', component: ReviewView, meta: { screen: 'SCR-03', title: 'Проверка данных', scene: 'review', slice: 'V2' } },
-  { path: '/create/access', name: 'create-access', component: StubView, meta: { screen: 'SCR-04', title: 'Доступ к разбору', scene: 'access', slice: '5' } },
+  { path: '/create/access', name: 'create-access', component: AccessView, meta: { screen: 'SCR-04', title: 'Доступ к разбору', scene: 'access', slice: '5' } },
   { path: '/create/consent', name: 'create-consent', component: StubView, meta: { screen: 'SCR-05', title: 'Подтверждение', scene: 'access', slice: '6' } },
   { path: '/orders/:id/creating', name: 'order-creating', component: StubView, meta: { screen: 'SCR-06', title: 'Построение карты', scene: 'creation', slice: 'V3, 8' } },
   { path: '/orders/:id', name: 'order', component: StubView, meta: { screen: 'SCR-07', title: 'Ваш разбор', scene: 'result', slice: 'V3, 11' } },

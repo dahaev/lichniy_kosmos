@@ -224,9 +224,10 @@ const intakeTime = intake('time')
 
 /**
  * The hero and the intake steps are calibrated (V1.1, V1.2). The review
- * stub holds the last intake frame so leaving step 04 does not fly the
- * camera back to the hero; other screens keep the hero scene until their
- * slices define their own key frames.
+ * holds the last intake frame so leaving step 04 does not fly the camera
+ * back to the hero, and access keeps the review's frame (SCR-04 Р-A2);
+ * other screens keep the hero scene until their slices define their own
+ * key frames.
  */
 export const compositions: Record<CompositionName, Record<SceneOrientation, SceneComposition>> = {
   hero,
@@ -235,7 +236,7 @@ export const compositions: Record<CompositionName, Record<SceneOrientation, Scen
   'intake.place': intake('place'),
   'intake.time': intakeTime,
   review: intakeTime,
-  access: hero,
+  access: intakeTime,
   creation: hero,
   result: hero,
   quiet: quieter(hero, 0.45),

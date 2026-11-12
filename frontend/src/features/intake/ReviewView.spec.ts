@@ -8,8 +8,10 @@ import { createMemoryHistory } from 'vue-router'
 import { createAppRouter } from '@/app/router'
 import { server } from '@/mocks/node'
 
+import { CHECK_KEY, isCheckedProfile } from './checkStamp'
 import { useIntakeDraft } from './draft'
 import IntakeView from './IntakeView.vue'
+import { toProfile } from './review'
 import ReviewView from './ReviewView.vue'
 
 const CHECK = '/api/v1/profile-checks'
@@ -133,6 +135,24 @@ describe('ReviewView', () => {
     await vi.waitFor(() => {
       expect(status()).toBe('Подожди минуту и попробуй снова.')
     })
+  })
+
+  it('records the checked profile for the access guard and drops it when a new check fails (SCR-04 §0.4)', async () => {
+    const { wrapper } = await open('/create/review')
+    await vi.waitFor(() => {
+      expect(status()).toBe('Данные проверены.')
+    })
+    const profile = toProfile(useIntakeDraft().draft)
+    if (!profile) throw new Error('incomplete draft')
+    expect(await isCheckedProfile(profile)).toBe(true)
+    wrapper.unmount()
+
+    server.use(http.post(CHECK, () => problem(503, { code: 'internal_error' })))
+    await open('/create/review')
+    await vi.waitFor(() => {
+      expect(status()).toBe('Не удалось проверить данные. Проверь соединение и попробуй ещё раз.')
+    })
+    expect(sessionStorage.getItem(CHECK_KEY)).toBeNull()
   })
 
   it('sends a fresh check on every entry (Р5)', async () => {

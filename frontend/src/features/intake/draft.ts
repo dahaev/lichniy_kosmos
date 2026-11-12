@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { reactive, watch } from 'vue'
 
+import { clearCheck } from './checkStamp'
 import { earlierStep, intakeSteps, parseStep, type IntakeStep } from './steps'
 import { validateDate, validateName, validateTime, type CalendarDate, type DateParts, type TimeAnswer } from './validation'
 
@@ -142,6 +143,8 @@ export const useIntakeDraft = defineStore('intakeDraft', () => {
   } catch {
     stored = null
   }
+  // A check outlives no draft: without the profile it fingerprinted it means nothing.
+  if (stored === null) clearCheck()
   const draft = reactive<IntakeDraft>(stored ?? emptyDraft())
 
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -180,6 +183,7 @@ export const useIntakeDraft = defineStore('intakeDraft', () => {
     } catch {
       // Nothing stored to clear.
     }
+    clearCheck()
   }
 
   return { draft, save, reset }

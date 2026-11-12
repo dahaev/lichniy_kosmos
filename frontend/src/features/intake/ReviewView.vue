@@ -12,6 +12,7 @@ import CosmosIcon from '@/ui/CosmosIcon.vue'
 import PrimaryCTA from '@/ui/PrimaryCTA.vue'
 import ProgressStep from '@/ui/ProgressStep.vue'
 
+import { clearCheck, recordCheck } from './checkStamp'
 import { useIntakeDraft } from './draft'
 import { INTAKE_ROUTE } from './guard'
 import { blockNames, checkFailure, invalidSteps, requestProfileCheck, reviewItems, toProfile, type ProfileCheck } from './review'
@@ -83,8 +84,13 @@ async function check(options: { announce?: boolean } = {}) {
   clearTimeout(slowTimer)
   slow.value = options.announce === true
   slowTimer = setTimeout(() => (slow.value = true), SLOW_MS)
+  clearCheck()
   try {
-    state.value = { status: 'ok', result: await requestProfileCheck(body, current.signal) }
+    const result = await requestProfileCheck(body, current.signal)
+    // Stored before «Продолжить» turns on, so the access guard never races it.
+    await recordCheck(body)
+    if (current.signal.aborted) return
+    state.value = { status: 'ok', result }
   } catch (cause) {
     if (current.signal.aborted) return
     const failure = checkFailure(cause instanceof ApiProblem ? cause : ApiProblem.network(cause))
