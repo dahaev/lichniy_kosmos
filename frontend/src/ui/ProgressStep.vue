@@ -5,14 +5,17 @@ import { computed } from 'vue'
 // hero strip turned into the intake's progress. The picture is hidden from
 // assistive technology, which reads the text status instead.
 
-const props = defineProps<{ current: number; total: number }>()
+// `done` is the review after the last step (SCR-03 §0.5): every segment
+// filled, the count gone.
+
+const props = defineProps<{ current: number; total: number; done?: boolean }>()
 
 const pad = (n: number) => String(n).padStart(2, '0')
-const label = computed(() => `Шаг ${String(props.current)} из ${String(props.total)}`)
+const label = computed(() => (props.done ? 'Анкета заполнена' : `Шаг ${String(props.current)} из ${String(props.total)}`))
 </script>
 
 <template>
-  <div class="progress-step">
+  <div class="progress-step" :class="{ 'progress-step--done': done }">
     <p class="visually-hidden">{{ label }}</p>
     <div class="progress-step__picture" aria-hidden="true">
       <span class="progress-step__count">
@@ -21,7 +24,7 @@ const label = computed(() => `Шаг ${String(props.current)} из ${String(prop
         </Transition>
       </span>
       <span class="progress-step__track">
-        <span v-for="n in total" :key="n" class="progress-step__segment" :class="{ 'is-done': n <= current }" />
+        <span v-for="n in total" :key="n" class="progress-step__segment" :class="{ 'is-done': done || n <= current }" />
       </span>
       <span class="progress-step__total"><span class="progress-step__slash">/</span> {{ pad(total) }}</span>
     </div>
@@ -103,6 +106,11 @@ const label = computed(() => `Шаг ${String(props.current)} из ${String(prop
 
 .progress-step__segment.is-done::after {
   transform: scaleX(1);
+}
+
+.progress-step--done .progress-step__count,
+.progress-step--done .progress-step__total {
+  display: none;
 }
 
 .progress-step__slash {
