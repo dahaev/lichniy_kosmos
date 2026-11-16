@@ -121,6 +121,10 @@ func TestConfig(t *testing.T) {
 	if got.Environment != "test" || got.Features != (Features{}) {
 		t.Errorf("config = %+v", got)
 	}
+	// Order creation stays closed by default (SCR-05, Q12).
+	if got.LegalReady || got.ConsentVersion != "" {
+		t.Errorf("legal gate is open by default: %+v", got)
+	}
 }
 
 func TestUnknownAPIRouteReturnsProblem(t *testing.T) {

@@ -166,6 +166,71 @@ describe('router', () => {
     })
   })
 
+  describe('consent guard (SCR-05 §0.3)', () => {
+    function fill() {
+      Object.assign(useIntakeDraft().draft, {
+        name: 'Тестовая Вега',
+        date: { day: '12', month: '03', year: '1990' },
+        place: { query: 'Казань', selected: { id: 'ru-kzn', name: 'Казань', country: 'Россия' } },
+        time: { kind: 'unknown', hhmm: '', source: 'unknown', accuracy: 0, accuracyTouched: false },
+      })
+    }
+
+    async function check(at?: number) {
+      const profile = toProfile(useIntakeDraft().draft)
+      if (!profile) throw new Error('incomplete draft')
+      await recordCheck(profile, at)
+    }
+
+    it('sends an unfinished draft to its first unanswered step in edit mode', async () => {
+      const router = createAppRouter(createMemoryHistory())
+      useIntakeDraft().draft.name = 'Тестовая Вега'
+      await router.push('/create/consent')
+      expect(router.currentRoute.value.fullPath).toBe('/create?step=date&from=review')
+    })
+
+    it('sends a complete but unchecked draft to the review', async () => {
+      const router = createAppRouter(createMemoryHistory())
+      fill()
+      await router.push('/create/consent')
+      expect(router.currentRoute.value.path).toBe('/create/review')
+    })
+
+    it('sends a draft changed after the check to the review', async () => {
+      const router = createAppRouter(createMemoryHistory())
+      fill()
+      await check()
+      useIntakeDraft().draft.name = 'Тестовая Лира'
+      await router.push('/create/consent')
+      expect(router.currentRoute.value.path).toBe('/create/review')
+    })
+
+    it('sends an expired check to the review', async () => {
+      const router = createAppRouter(createMemoryHistory())
+      fill()
+      await check(Date.now() - CHECK_TTL_MS - 1)
+      await router.push('/create/consent')
+      expect(router.currentRoute.value.path).toBe('/create/review')
+    })
+
+    it('opens for the profile the server checked, with no network and no writes', async () => {
+      const router = createAppRouter(createMemoryHistory())
+      fill()
+      await check()
+      const ours = () => Object.keys(sessionStorage).filter((key) => key.startsWith('cosmos.')).map((key) => [key, sessionStorage.getItem(key)])
+      const before = ours()
+      await router.push('/create/consent')
+      expect(router.currentRoute.value.path).toBe('/create/consent')
+      expect(ours()).toEqual(before)
+    })
+
+    it('does not touch the other routes', async () => {
+      const router = createAppRouter(createMemoryHistory())
+      await router.push('/orders/demo/creating')
+      expect(router.currentRoute.value.path).toBe('/orders/demo/creating')
+    })
+  })
+
   it('keeps the edit flag when a step link is corrected', async () => {
     const router = createAppRouter(createMemoryHistory())
 

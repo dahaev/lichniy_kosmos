@@ -10,7 +10,8 @@
     "visual": "node visual/derive-reference.mjs && playwright test --project=visual && node visual/compare.mjs",
     "reference": "node visual/derive-reference.mjs",
     "typecheck": "tsc --noEmit",
-    "install-browsers": "playwright install chromium"
+    "install-browsers": "playwright install chromium",
+    "test:prod": "playwright test -c playwright.prod.config.ts"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.14.0",

@@ -4,7 +4,8 @@ import { MOCK_HEADER } from '@/api/client'
 import type { components } from '@/api/schema'
 
 import { accessDetails, createAccessMock } from './access'
-import { publicConfig } from './fixtures'
+import { publicConfig, testCreationConfig } from './fixtures'
+import { createOrdersMock, type OrdersFault, type OrdersScenario } from './orders'
 import { places, searchPlaces } from './places'
 import { checkProfile } from './profileChecks'
 
@@ -58,8 +59,65 @@ function seedSession(): void {
   if (mode === 'code-consumed') accessMock.seed('consumed')
 }
 
+/**
+ * The explicit test mode of order creation (SCR-05 К6, К8): the owner tries
+ * the screen on mocks. It needs all three: a dev build, MSW switched on and
+ * `?creation=test` on the page. `import.meta.env.DEV` is a compile-time
+ * constant, and production never bundles this file (`main.ts` imports the
+ * mocks only under the same check), so the production path cannot reach it.
+ */
+export function creationTestMode(): boolean {
+  return import.meta.env.DEV && import.meta.env.VITE_API_MOCKS === '1' && devMode('creation') === 'test'
+}
+
+/**
+ * The configuration the mock server reports. Closed (`legal_ready=false`) in
+ * every mode but the explicit test mode.
+ */
+export function currentConfig(): Schemas['PublicConfig'] {
+  return creationTestMode() ? testCreationConfig(ordersMock.consentVersion()) : publicConfig
+}
+
+/**
+ * Order creation states (SCR-05 §0.4, §0.8): `?orders=slow`, `error`
+ * (503, nothing created), `timeout` (created, the answer is lost),
+ * `drop` (the request is lost, nothing created), `error-after` (created, 503),
+ * `rate-limited`, `consent-outdated`, `blocked`, `used`, `calculation-failed`,
+ * `nonexistent` or `ambiguous`. Faults happen once, so a retry can recover.
+ */
+function ordersMode(): string | null {
+  return devMode('orders')
+}
+
+const faultModes: Record<string, OrdersFault> = {
+  timeout: 'lost-response',
+  drop: 'lost-request',
+  'error-after': 'error-after-commit',
+}
+
+const scenarioModes: OrdersScenario[] = ['rate-limited', 'consent-outdated', 'blocked', 'used', 'calculation-failed', 'nonexistent', 'ambiguous']
+
+function orderScenario(mode: string | null): OrdersScenario | null {
+  return scenarioModes.find((scenario) => scenario === mode) ?? null
+}
+
+/** One mock server for the page: the gate reads the configuration it serves. */
+export const ordersMock = createOrdersMock(accessMock, () => {
+  const { legal_ready: legalReady, features } = currentConfig()
+  return { legalReady, generation: features.generation }
+})
+let devFaultArmed = false
+
+function armDevFault(): void {
+  const fault = faultModes[ordersMode() ?? '']
+  if (devFaultArmed || !fault) return
+  devFaultArmed = true
+  ordersMock.inject(fault)
+}
+
 const statusTitles: Record<number, string> = {
   400: 'Bad Request',
+  401: 'Unauthorized',
   403: 'Forbidden',
   404: 'Not Found',
   409: 'Conflict',
@@ -95,7 +153,7 @@ export const handlers = [
     ),
   ),
 
-  http.get('/api/v1/config', () => HttpResponse.json<Schemas['PublicConfig']>(publicConfig, { headers: mockHeaders })),
+  http.get('/api/v1/config', () => HttpResponse.json<Schemas['PublicConfig']>(currentConfig(), { headers: mockHeaders })),
 
   http.get<never, never, Schemas['PlaceList'] | Schemas['Problem']>('/api/v1/places', async ({ request }) => {
     const mode = placesMode()
@@ -154,5 +212,31 @@ export const handlers = [
     if (outcome.status === 200) return HttpResponse.json<Schemas['CodeSession']>(outcome.body, { headers: mockHeaders })
     const headers = outcome.retryAfter ? { 'retry-after': String(outcome.retryAfter) } : {}
     return problem(outcome.status, outcome.code, { detail: outcome.detail }, headers)
+  }),
+
+  http.post<never, never, Schemas['OrderCreated'] | Schemas['Problem']>('/api/v1/orders', async ({ request }) => {
+    seedSession()
+    armDevFault()
+    const mode = ordersMode()
+    await delay(mode === 'slow' ? 1500 : 150)
+    if (mode === 'error') return problem(503, 'internal_error')
+    // The request never reached the server: nothing is created, the client sees a network error.
+    const fault = ordersMock.takeFault()
+    if (fault === 'lost-request') return HttpResponse.error()
+    let body: unknown
+    try {
+      body = await request.json()
+    } catch {
+      body = undefined
+    }
+    const outcome = ordersMock.create({ key: request.headers.get('idempotency-key'), body, scenario: orderScenario(mode) })
+    // The server decided and committed; the answer does not reach the client.
+    if (fault === 'lost-response') return HttpResponse.error()
+    if (fault === 'error-after-commit') return problem(503, 'internal_error')
+    if ('body' in outcome) {
+      return HttpResponse.json<Schemas['OrderCreated']>(outcome.body, { status: outcome.status, headers: mockHeaders })
+    }
+    const headers = outcome.retryAfter ? { 'retry-after': String(outcome.retryAfter) } : {}
+    return problem(outcome.status, outcome.code, { detail: outcome.detail, ...(outcome.fields ? { fields: outcome.fields } : {}) }, headers)
   }),
 ]

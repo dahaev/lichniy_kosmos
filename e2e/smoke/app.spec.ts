@@ -32,7 +32,12 @@ test('API requests are served by the mock worker', async ({ page }) => {
   expect(res).toEqual({
     status: 200,
     mock: '1',
-    body: { environment: 'local', features: { code_login: false, email_login: false, generation: false } },
+    body: {
+      environment: 'local',
+      features: { code_login: false, email_login: false, generation: false },
+      consent_version: '',
+      legal_ready: false,
+    },
   })
 })
 

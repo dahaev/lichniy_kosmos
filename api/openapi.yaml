@@ -1,12 +1,13 @@
 openapi: 3.1.0
 info:
   title: Личный космос 2.0 API
-  version: 0.3.0-5
+  version: 0.3.0-6
   description: |
     Контракт frontend/backend — единственный источник истины (ARCHITECTURE_MVP_v2 §15).
     Срез S0: служебные проверки и публичная конфигурация; V1.2: места; V2: проверка
     анкеты (`profile-checks`, пока только MSW-мок); 5: сессия и кодовый вход
-    (`session`, `auth/code`, пока только MSW-мок). Эндпоинты домена
+    (`session`, `auth/code`, пока только MSW-мок); 6: создание заказа
+    (`orders`, пока только MSW-мок; реальное создание закрыто `legal_ready`). Эндпоинты домена
     добавляются в контракт до реализации и до MSW-моков (§16.6).
 
     Ошибки — application/problem+json (RFC 9457) со стабильным полем `code`.
@@ -23,6 +24,8 @@ tags:
     description: Проверка анкеты рождения
   - name: auth
     description: Текущая сессия и кодовый вход
+  - name: orders
+    description: Создание заказа (расход доступа и постановка генерации)
 
 paths:
   /healthz:
@@ -275,6 +278,134 @@ paths:
         default:
           $ref: '#/components/responses/Problem'
 
+  /api/v1/orders:
+    post:
+      tags: [orders]
+      operationId: createOrder
+      summary: Создать заказ
+      description: |
+        Единственная точка, где расходуется доступ (§11). Требует сессию с
+        доступом `available`; защита от подделки запроса — как у остальных
+        изменяющих методов (§9.4).
+
+        Сервер повторно проверяет анкету, разрешает место, считает карту вне
+        транзакции и затем одной транзакцией создаёт заказ, помечает доступ
+        использованным и ставит генерацию в очередь. Ответ `201`/`200` значит
+        «заказ создан и поставлен в очередь» (`queued`), а не «разбор готов»:
+        исход генерации читается отдельно.
+
+        Идемпотентность. Ключ `Idempotency-Key` и тело запроса образуют
+        отпечаток; в него входят `entitlement_id`, `profile` и
+        `consent_version`. Тот же ключ и тот же отпечаток возвращают тот же
+        заказ (`200`, а у самого первого запроса — `201`). Тот же ключ с
+        другим отпечатком — `409 idempotency_key_reused`, новый заказ не
+        создаётся. Клиент при неизвестном исходе (сеть, таймаут, `5xx`)
+        повторяет запрос только с тем же ключом.
+
+        Реальное создание закрыто, пока `PublicConfig.legal_ready = false`
+        или `features.generation = false`: ответ `403 creation_unavailable`,
+        ничего не создано, доступ не тронут. Сервер проверяет это
+        независимо от клиента. Версия согласия сверяется с серверной под
+        блокировкой доступа (`409 consent_outdated`).
+
+        Определённые отказы до создания заказа (`4xx`) оставляют доступ
+        `available`. Заказ при окончательной неудаче генерации подлежит
+        восстановлению или административному разбору; доступ автоматически
+        не освобождается (инвариант «один доступ — максимум один заказ»).
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          description: Ключ повтора, 16–80 символов `[A-Za-z0-9_-]`; клиент хранит его до подтверждённого ответа
+          schema:
+            type: string
+            minLength: 16
+            maxLength: 80
+            pattern: '^[A-Za-z0-9_-]{16,80}$'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateOrder'
+      responses:
+        '201':
+          description: Заказ создан, доступ использован, генерация поставлена в очередь
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderCreated'
+        '200':
+          description: Повтор того же запроса (или заказ уже создан по тому же доступу с той же анкетой); тот же заказ
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrderCreated'
+        '400':
+          description: Тело не разобрано или нет корректного `Idempotency-Key` (`validation_failed`)
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '401':
+          description: Нет действующей сессии (`unauthenticated`); заказ не создан
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '403':
+          description: |
+            Создание сейчас недоступно (`creation_unavailable`): юридический
+            допуск не получен или генерация выключена. Ничего не создано,
+            доступ `available`. Это определённый отказ, не неизвестный исход.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '404':
+          description: |
+            `entitlement_id` не принадлежит текущей сессии (`not_found`); о
+            чужих доступах сервер ничего не раскрывает. Заказ не создан.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: |
+            `consent_outdated` — версия согласия устарела; `entitlement_used`
+            — по доступу уже создан другой заказ (`order_id` читается из
+            `GET /api/v1/session`); `entitlement_blocked` — доступ
+            заблокирован; `idempotency_key_reused` — тот же ключ с другим
+            запросом. Новый заказ не создан.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          description: |
+            Анкета не прошла проверку или карта не рассчитана. `code`:
+            `validation_failed`, `place_not_found`, `birth_time_nonexistent`,
+            `birth_time_ambiguous` (с `fields`, как у `profile-checks`) или
+            `calculation_failed`. Заказ не создан, доступ `available`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '429':
+          description: Превышен лимит частоты (`rate_limited`)
+          headers:
+            Retry-After:
+              description: Через сколько секунд можно повторить
+              schema:
+                type: integer
+                minimum: 1
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        default:
+          $ref: '#/components/responses/Problem'
+
 components:
   responses:
     Problem:
@@ -312,13 +443,26 @@ components:
     PublicConfig:
       type: object
       additionalProperties: false
-      required: [environment, features]
+      required: [environment, features, consent_version, legal_ready]
       properties:
         environment:
           type: string
           enum: [local, test, staging, production]
         features:
           $ref: '#/components/schemas/Features'
+        consent_version:
+          type: string
+          description: |
+            Текущая серверная версия согласия на создание разбора (§11.2,
+            `POST /api/v1/orders`). Пока юридический текст не утверждён (Q12),
+            значение может быть пустым: клиент тогда ничего не отправляет.
+        legal_ready:
+          type: boolean
+          description: |
+            Юридический допуск получен: утверждены тексты согласия и документы.
+            По умолчанию `false`; при `false` создание заказа закрыто, а
+            `POST /api/v1/orders` отвечает `403 creation_unavailable`. Клиентский
+            флаг не заменяет проверку на сервере.
 
     Features:
       type: object
@@ -539,6 +683,39 @@ components:
       pattern: '^[0-9A-HJKMNP-TV-Z]{4}$'
       description: Последние 4 символа нормализованного кода (§10.2)
 
+    CreateOrder:
+      type: object
+      additionalProperties: false
+      description: Тело `POST /api/v1/orders` (§11.1); часть отпечатка идемпотентности
+      required: [entitlement_id, profile, consent_version]
+      properties:
+        entitlement_id:
+          type: string
+          format: uuid
+          description: Доступ текущей сессии, который будет использован
+        profile:
+          $ref: '#/components/schemas/Profile'
+        consent_version:
+          type: string
+          minLength: 1
+          description: Версия согласия из `PublicConfig.consent_version`, которую увидел пользователь
+
+    OrderCreated:
+      type: object
+      additionalProperties: false
+      description: |
+        Минимальный ответ создания заказа. Полная схема заказа появится вместе
+        с `GET /api/v1/orders/{id}` (SCR-06/07).
+      required: [id, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [queued]
+          description: Генерация поставлена в очередь; это не готовность разбора
+
     Problem:
       type: object
       additionalProperties: false
@@ -590,6 +767,7 @@ components:
         - entitlement_used
         - entitlement_blocked
         - consent_outdated
+        - creation_unavailable
         - idempotency_key_reused
         - files_not_ready
         - resume_not_allowed

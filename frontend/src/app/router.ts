@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory, type Router, type RouterHistory } from 'vue-router'
 
-import { guardAccess, guardIntake } from '@/features/intake/guard'
+import { guardAccess, guardConsent, guardIntake } from '@/features/intake/guard'
 
 import { routes } from './routes'
 
@@ -22,6 +22,7 @@ export function createAppRouter(history: RouterHistory = createWebHistory()) {
 
   router.beforeEach(guardIntake)
   router.beforeEach(guardAccess)
+  router.beforeEach(guardConsent)
 
   router.afterEach((to, _from, failure) => {
     if (failure) return

@@ -3,10 +3,16 @@ package httpapi
 import "net/http"
 
 // PublicConfig is the client-visible runtime configuration (GET /api/v1/config).
-// Consent version and support contacts join it in the slices that define them.
+// Support contacts join it in the slice that defines them.
+//
+// The zero value is the closed state: LegalReady is false and ConsentVersion
+// is empty until the approved consent text exists (Q12). The orders handler
+// that enforces the same gate on the server is a later slice.
 type PublicConfig struct {
-	Environment string   `json:"environment"`
-	Features    Features `json:"features"`
+	Environment    string   `json:"environment"`
+	Features       Features `json:"features"`
+	ConsentVersion string   `json:"consent_version"`
+	LegalReady     bool     `json:"legal_ready"`
 }
 
 // Features tells the client which user flows the server currently serves.

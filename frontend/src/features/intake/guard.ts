@@ -10,6 +10,7 @@ import { parseStep, REVIEW_RETURN, stepScene } from './steps'
 export const INTAKE_ROUTE = 'create'
 export const REVIEW_ROUTE = 'create-review'
 export const ACCESS_ROUTE = 'create-access'
+export const CONSENT_ROUTE = 'create-consent'
 
 /**
  * Keeps `/create?step=` honest (SCR-02 §0.6): no step means the saved one,
@@ -37,8 +38,21 @@ export function guardIntake(to: RouteLocationNormalized): true | RouteLocationRa
  * this tab. An unfinished draft goes to its first unanswered step, a changed
  * or unchecked one to the review, which checks it again (Р5). No network.
  */
-export async function guardAccess(to: RouteLocationNormalized): Promise<true | RouteLocationRaw> {
-  if (to.name !== ACCESS_ROUTE) return true
+export function guardAccess(to: RouteLocationNormalized): Promise<true | RouteLocationRaw> | true {
+  return to.name === ACCESS_ROUTE ? guardCheckedProfile() : true
+}
+
+/**
+ * SCR-05 §0.3: the consent opens under the same rule as access: a complete
+ * draft the server checked last in this tab. The code session and the
+ * configuration are read by the screen itself, so the guard stays sync-cheap
+ * and writes nothing.
+ */
+export function guardConsent(to: RouteLocationNormalized): Promise<true | RouteLocationRaw> | true {
+  return to.name === CONSENT_ROUTE ? guardCheckedProfile() : true
+}
+
+async function guardCheckedProfile(): Promise<true | RouteLocationRaw> {
   const { draft } = useIntakeDraft()
   const open = firstIncomplete(draft)
   if (open) return { name: INTAKE_ROUTE, query: { step: open, from: REVIEW_RETURN }, replace: true }

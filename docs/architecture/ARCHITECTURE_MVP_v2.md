@@ -535,9 +535,10 @@ sequenceDiagram
 | Таймаут ответа у клиента | Клиент повторяет с тем же ключом или читает `GET /entitlements/{id}` → видит `order_id` |
 | Ошибка расчёта / невалидная анкета / DST-неоднозначность | `422`, доступ `available` |
 | Доступ заблокирован между проверкой и транзакцией | `409 entitlement_blocked`, ничего не создано |
+| Создание закрыто: `legal_ready = false` (Q12) или `features.generation = false` | `403 creation_unavailable`, ничего не создано, доступ `available`; проверка на сервере независима от клиента |
 | Падение процесса после COMMIT до ответа | Повтор с тем же ключом возвращает заказ |
 
-Генерация ставится в очередь в той же транзакции: `orders` вызывает `generation.Enqueue(tx, JobInput)`, который создаёт `generation.jobs` со снимком входа и шаги `reading = queued`, `illustration = pending`. Это транзакционный outbox: заказ без поставленной генерации невозможен. Если ИИ выключен конфигурацией, задание создаётся с `enabled = false`, worker его не берёт, вычисленный статус — `calculated`.
+Генерация ставится в очередь в той же транзакции: `orders` вызывает `generation.Enqueue(tx, JobInput)`, который создаёт `generation.jobs` со снимком входа и шаги `reading = queued`, `illustration = pending`. Это транзакционный outbox: заказ без поставленной генерации невозможен. Если ИИ выключен конфигурацией, задание создаётся с `enabled = false`, worker его не берёт, вычисленный статус — `calculated`. **В срезе 6 (решение владельца 16.11.2026, SCR-05 Р-C8):** при `features.generation = false` создание заказа закрыто (`403 creation_unavailable`, строка матрицы выше), поэтому ветка `enabled = false` / `calculated` через `POST /orders` не создаётся; она сохранена для других сценариев и в этом срезе недостижима.
 
 ---
 
@@ -646,7 +647,7 @@ stateDiagram-v2
 
 | Статус | Когда |
 |---|---|
-| `calculated` | Карта есть, генерация выключена конфигурацией |
+| `calculated` | Карта есть, генерация выключена конфигурацией. В срезе 6 не создаётся: при `generation = false` создание заказа закрыто (§11.3) |
 | `queued` | Шаг `reading` в очереди |
 | `writing` | `reading` выполняется |
 | `illustrating` | Текст принят, `illustration` в очереди/выполняется |
@@ -661,6 +662,7 @@ stateDiagram-v2
 - Глобальная параллельность платных вызовов (по умолчанию 1–2) и дневной лимит вызовов; при превышении шаги остаются `queued`, без вызова.
 - Автопредохранитель: N подряд отказов конфигурации → `ops.flags.generation_paused` + оповещение.
 - Пользовательское «Продолжить» (`POST …/generation/resume`) разрешено только при `failed_retryable` и не более K раз на заказ; при `needs_review` кнопки нет.
+- Доступ при окончательной неудаче генерации автоматически не освобождается (решение владельца 16.11.2026, SCR-05 Р-C9; инвариант «один доступ — максимум один заказ» сохраняется). Восстановление выполняется в рамках того же заказа (продолжение при `failed_retryable`, §13.7); если нужно вмешательство, заказ переходит в `needs_review` (§13.8). Административная компенсация доступа — отдельная будущая операция, в этой версии не описана и не реализуется.
 - Вопрос к владельцу (Q5): разрешить ли режим провайдера, который позволяет получить результат по ID после сбоя (например, фоновые ответы с хранением на стороне провайдера). Это сократит число `needs_review`, но означает хранение данных у провайдера.
 
 ### 13.8. Ручная проверка
@@ -710,7 +712,7 @@ PDF-движок (Q6, спайк):
 | Метод и путь | Доступ | Назначение |
 |---|---|---|
 | `GET /healthz`, `GET /readyz` | Public | Живость; готовность (БД, blob) |
-| `GET /api/v1/config` | Public | Текущая версия согласия, флаги функций, контакты поддержки |
+| `GET /api/v1/config` | Public | Текущая версия согласия (`consent_version`), признак юридического допуска (`legal_ready`), флаги функций, контакты поддержки |
 | `GET /api/v1/places?q=` | Public, лимит частоты | До 20 мест |
 | `GET /api/v1/places/{id}` | Public | Одно место |
 | `POST /api/v1/profile-checks` | Public, лимит | Нормализация и проверка анкеты без сохранения |
@@ -734,7 +736,7 @@ PDF-движок (Q6, спайк):
 
 ### 15.3. Каталог кодов ошибок (стартовый)
 
-`validation_failed`, `place_not_found`, `birth_time_nonexistent`, `birth_time_ambiguous`, `calculation_failed`, `unauthenticated`, `not_found`, `rate_limited`, `mail_unavailable`, `otp_invalid`, `otp_expired`, `otp_attempts_exceeded`, `code_malformed`, `code_invalid`, `code_bound_to_account`, `code_claimed_elsewhere`, `session_conflict`, `entitlement_used`, `entitlement_blocked`, `consent_outdated`, `idempotency_key_reused`, `files_not_ready`, `resume_not_allowed`.
+`validation_failed`, `place_not_found`, `birth_time_nonexistent`, `birth_time_ambiguous`, `calculation_failed`, `unauthenticated`, `not_found`, `rate_limited`, `mail_unavailable`, `otp_invalid`, `otp_expired`, `otp_attempts_exceeded`, `code_malformed`, `code_invalid`, `code_bound_to_account`, `code_claimed_elsewhere`, `session_conflict`, `entitlement_used`, `entitlement_blocked`, `consent_outdated`, `creation_unavailable`, `idempotency_key_reused`, `files_not_ready`, `resume_not_allowed`.
 
 ### 15.4. Ключевые модели (смысл, не схема)
 

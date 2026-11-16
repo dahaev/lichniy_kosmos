@@ -91,10 +91,21 @@ function readLogin(body: unknown): Schemas['CodeLogin'] | null {
   return replace === undefined ? { code } : { code, replace_session: replace }
 }
 
+/** The entitlement of the live session, as the orders mock needs it. */
+export interface SessionEntitlement {
+  id: string
+  state: 'available' | 'consumed'
+  orderId?: string
+}
+
 export function createAccessMock(now: () => number = Date.now) {
-  const entitlements = registry()
+  let entitlements = registry()
   let current: ActiveSession | null = null
   let failures: number[] = []
+
+  function findById(id: string): Entitlement | undefined {
+    return [...entitlements.values()].find((entitlement) => entitlement.id === id)
+  }
 
   function codeSession(session: ActiveSession): Schemas['CodeSession'] {
     const entitlement = entitlements.get(session.key)
@@ -124,10 +135,37 @@ export function createAccessMock(now: () => number = Date.now) {
     return { status, code, detail }
   }
 
+  function readSession(): Schemas['Session'] {
+    if (current && current.expiresAt <= now()) current = null
+    // A blocked entitlement has no valid session (ARCHITECTURE_MVP_v2 §9.2).
+    if (current && entitlements.get(current.key)?.state === 'blocked') current = null
+    return current ? codeSession(current) : { principal: 'anonymous' }
+  }
+
   return {
-    session(): Schemas['Session'] {
-      if (current && current.expiresAt <= now()) current = null
-      return current ? codeSession(current) : { principal: 'anonymous' }
+    session: readSession,
+
+    /** The entitlement of the live code session, or null without one. */
+    sessionEntitlement(): SessionEntitlement | null {
+      const session = readSession()
+      if (session.principal !== 'code') return null
+      const { id, state } = session.entitlement
+      return state === 'consumed' ? { id, state, orderId: session.entitlement.order_id } : { id, state }
+    },
+
+    /** Order creation spends the entitlement; the session then shows `order_id`. */
+    consume(entitlementId: string, orderId: string): boolean {
+      const entitlement = findById(entitlementId)
+      if (entitlement?.state !== 'available') return false
+      entitlement.state = 'consumed'
+      entitlement.orderId = orderId
+      return true
+    },
+
+    /** The owner blocked the code while the session was open. */
+    block(entitlementId: string): void {
+      const entitlement = findById(entitlementId)
+      if (entitlement) entitlement.state = 'blocked'
     },
 
     login(body: unknown): CodeLoginOutcome {
@@ -160,6 +198,7 @@ export function createAccessMock(now: () => number = Date.now) {
     reset(): void {
       current = null
       failures = []
+      entitlements = registry()
     },
   }
 }

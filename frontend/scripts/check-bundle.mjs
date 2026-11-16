@@ -3,7 +3,21 @@ import { readdir, readFile } from 'node:fs/promises'
 import path from 'node:path'
 
 const dist = path.resolve(import.meta.dirname, '..', 'dist')
-const forbidden = [/mockServiceWorker/, /\bmsw\b/, /setupWorker/]
+// Mock infrastructure, and the test mode of order creation (SCR-05 Р-C4, Р-C12):
+// its banner, the stand-in consent text and the switch must not be in any bundle.
+const forbidden = [
+  /mockServiceWorker/,
+  /\bmsw\b/,
+  /setupWorker/,
+  /Тестовый режим/,
+  /Текст согласия появится/,
+  /data-test-mode/,
+  /TestModeBanner/,
+  /TestConsentText/,
+  /test-consent-v/,
+  /creation=test/,
+  /creationTestMode/,
+]
 
 async function* files(dir) {
   for (const entry of await readdir(dir, { withFileTypes: true })) {

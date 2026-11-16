@@ -177,6 +177,53 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Создать заказ
+         * @description Единственная точка, где расходуется доступ (§11). Требует сессию с
+         *     доступом `available`; защита от подделки запроса — как у остальных
+         *     изменяющих методов (§9.4).
+         *
+         *     Сервер повторно проверяет анкету, разрешает место, считает карту вне
+         *     транзакции и затем одной транзакцией создаёт заказ, помечает доступ
+         *     использованным и ставит генерацию в очередь. Ответ `201`/`200` значит
+         *     «заказ создан и поставлен в очередь» (`queued`), а не «разбор готов»:
+         *     исход генерации читается отдельно.
+         *
+         *     Идемпотентность. Ключ `Idempotency-Key` и тело запроса образуют
+         *     отпечаток; в него входят `entitlement_id`, `profile` и
+         *     `consent_version`. Тот же ключ и тот же отпечаток возвращают тот же
+         *     заказ (`200`, а у самого первого запроса — `201`). Тот же ключ с
+         *     другим отпечатком — `409 idempotency_key_reused`, новый заказ не
+         *     создаётся. Клиент при неизвестном исходе (сеть, таймаут, `5xx`)
+         *     повторяет запрос только с тем же ключом.
+         *
+         *     Реальное создание закрыто, пока `PublicConfig.legal_ready = false`
+         *     или `features.generation = false`: ответ `403 creation_unavailable`,
+         *     ничего не создано, доступ не тронут. Сервер проверяет это
+         *     независимо от клиента. Версия согласия сверяется с серверной под
+         *     блокировкой доступа (`409 consent_outdated`).
+         *
+         *     Определённые отказы до создания заказа (`4xx`) оставляют доступ
+         *     `available`. Заказ при окончательной неудаче генерации подлежит
+         *     восстановлению или административному разбору; доступ автоматически
+         *     не освобождается (инвариант «один доступ — максимум один заказ»).
+         */
+        post: operations["createOrder"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -197,6 +244,19 @@ export interface components {
             /** @enum {string} */
             environment: "local" | "test" | "staging" | "production";
             features: components["schemas"]["Features"];
+            /**
+             * @description Текущая серверная версия согласия на создание разбора (§11.2,
+             *     `POST /api/v1/orders`). Пока юридический текст не утверждён (Q12),
+             *     значение может быть пустым: клиент тогда ничего не отправляет.
+             */
+            consent_version: string;
+            /**
+             * @description Юридический допуск получен: утверждены тексты согласия и документы.
+             *     По умолчанию `false`; при `false` создание заказа закрыто, а
+             *     `POST /api/v1/orders` отвечает `403 creation_unavailable`. Клиентский
+             *     флаг не заменяет проверку на сервере.
+             */
+            legal_ready: boolean;
         };
         /** @description Какие пользовательские сценарии сервер обслуживает сейчас */
         Features: {
@@ -314,6 +374,30 @@ export interface components {
         };
         /** @description Последние 4 символа нормализованного кода (§10.2) */
         CodeMask: string;
+        /** @description Тело `POST /api/v1/orders` (§11.1); часть отпечатка идемпотентности */
+        CreateOrder: {
+            /**
+             * Format: uuid
+             * @description Доступ текущей сессии, который будет использован
+             */
+            entitlement_id: string;
+            profile: components["schemas"]["Profile"];
+            /** @description Версия согласия из `PublicConfig.consent_version`, которую увидел пользователь */
+            consent_version: string;
+        };
+        /**
+         * @description Минимальный ответ создания заказа. Полная схема заказа появится вместе
+         *     с `GET /api/v1/orders/{id}` (SCR-06/07).
+         */
+        OrderCreated: {
+            /** Format: uuid */
+            id: string;
+            /**
+             * @description Генерация поставлена в очередь; это не готовность разбора
+             * @enum {string}
+             */
+            status: "queued";
+        };
         Problem: {
             type: string;
             title: string;
@@ -331,7 +415,7 @@ export interface components {
          * @description Стабильный машинный код ошибки (§15.3)
          * @enum {string}
          */
-        ErrorCode: "internal_error" | "validation_failed" | "place_not_found" | "birth_time_nonexistent" | "birth_time_ambiguous" | "calculation_failed" | "unauthenticated" | "not_found" | "rate_limited" | "mail_unavailable" | "otp_invalid" | "otp_expired" | "otp_attempts_exceeded" | "code_malformed" | "code_invalid" | "code_bound_to_account" | "code_claimed_elsewhere" | "session_conflict" | "entitlement_used" | "entitlement_blocked" | "consent_outdated" | "idempotency_key_reused" | "files_not_ready" | "resume_not_allowed";
+        ErrorCode: "internal_error" | "validation_failed" | "place_not_found" | "birth_time_nonexistent" | "birth_time_ambiguous" | "calculation_failed" | "unauthenticated" | "not_found" | "rate_limited" | "mail_unavailable" | "otp_invalid" | "otp_expired" | "otp_attempts_exceeded" | "code_malformed" | "code_invalid" | "code_bound_to_account" | "code_claimed_elsewhere" | "session_conflict" | "entitlement_used" | "entitlement_blocked" | "consent_outdated" | "creation_unavailable" | "idempotency_key_reused" | "files_not_ready" | "resume_not_allowed";
     };
     responses: {
         /** @description Ошибка в формате RFC 9457 */
@@ -614,6 +698,126 @@ export interface operations {
                 };
             };
             /** @description Превышен лимит попыток (`rate_limited`) */
+            429: {
+                headers: {
+                    /** @description Через сколько секунд можно повторить */
+                    "Retry-After"?: number;
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    createOrder: {
+        parameters: {
+            query?: never;
+            header: {
+                /** @description Ключ повтора, 16–80 символов `[A-Za-z0-9_-]`; клиент хранит его до подтверждённого ответа */
+                "Idempotency-Key": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateOrder"];
+            };
+        };
+        responses: {
+            /** @description Повтор того же запроса (или заказ уже создан по тому же доступу с той же анкетой); тот же заказ */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderCreated"];
+                };
+            };
+            /** @description Заказ создан, доступ использован, генерация поставлена в очередь */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderCreated"];
+                };
+            };
+            /** @description Тело не разобрано или нет корректного `Idempotency-Key` (`validation_failed`) */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Нет действующей сессии (`unauthenticated`); заказ не создан */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /**
+             * @description Создание сейчас недоступно (`creation_unavailable`): юридический
+             *     допуск не получен или генерация выключена. Ничего не создано,
+             *     доступ `available`. Это определённый отказ, не неизвестный исход.
+             */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /**
+             * @description `entitlement_id` не принадлежит текущей сессии (`not_found`); о
+             *     чужих доступах сервер ничего не раскрывает. Заказ не создан.
+             */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /**
+             * @description `consent_outdated` — версия согласия устарела; `entitlement_used`
+             *     — по доступу уже создан другой заказ (`order_id` читается из
+             *     `GET /api/v1/session`); `entitlement_blocked` — доступ
+             *     заблокирован; `idempotency_key_reused` — тот же ключ с другим
+             *     запросом. Новый заказ не создан.
+             */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /**
+             * @description Анкета не прошла проверку или карта не рассчитана. `code`:
+             *     `validation_failed`, `place_not_found`, `birth_time_nonexistent`,
+             *     `birth_time_ambiguous` (с `fields`, как у `profile-checks`) или
+             *     `calculation_failed`. Заказ не создан, доступ `available`.
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            /** @description Превышен лимит частоты (`rate_limited`) */
             429: {
                 headers: {
                     /** @description Через сколько секунд можно повторить */

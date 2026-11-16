@@ -114,6 +114,10 @@ fe-build: ## Production build and mock-free bundle check
 e2e: ## Playwright smoke tests against Vite + MSW
 	cd e2e && npm run typecheck && npm test
 
+.PHONY: e2e-prod
+e2e-prod: ## Playwright against the production build: order creation cannot be opened from the client
+	cd e2e && npm run typecheck && npm run test:prod
+
 .PHONY: visual
 visual: ## Snapshots at 4 viewports and comparison with the hero reference
 	cd e2e && npm run visual

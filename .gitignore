@@ -24,6 +24,7 @@ coverage/
 e2e/visual/output/
 e2e/visual/reference/*.png
 e2e/test-results/
+e2e/test-results-prod/
 e2e/playwright-report/
 
 # impeccable local state (engine home and live sessions)
