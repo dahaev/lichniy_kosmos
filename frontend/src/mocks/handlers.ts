@@ -4,7 +4,10 @@ import { MOCK_HEADER } from '@/api/client'
 import type { components } from '@/api/schema'
 
 import { accessDetails, createAccessMock } from './access'
+import { isChartFixtureName } from './chartFixtures'
 import { publicConfig, testCreationConfig } from './fixtures'
+import { createOrderReadsMock, type ReadOutcome, type ReadScenario } from './orderReads'
+import { nextHappyState, parseState } from './orderStates'
 import { createOrdersMock, type OrdersFault, type OrdersScenario } from './orders'
 import { places, searchPlaces } from './places'
 import { checkProfile } from './profileChecks'
@@ -101,11 +104,79 @@ function orderScenario(mode: string | null): OrdersScenario | null {
   return scenarioModes.find((scenario) => scenario === mode) ?? null
 }
 
+/**
+ * Order reading (SCR-06 §0.4). It is its own right, apart from creating: the
+ * gate above does not reach it. Dev switches on the page URL:
+ * `?order-state=<state>` (`queued`, `writing`, `illustrating`, `ready`,
+ * `failed_retryable[:reading|:illustration]`, `needs_review:paused|review`
+ * with the same suffixes) and `?order-chart=<known|range|unknown|polar|stellium>`
+ * give an order its state and synthetic chart; `?order-flow=auto` moves it one
+ * step along the happy path every third read; `?order-read=slow|error|rate-limited`
+ * spoils the read itself.
+ */
+export const orderReadsMock = createOrderReadsMock(accessMock)
+
+function devOrderState() {
+  return parseState(devMode('order-state')) ?? undefined
+}
+
+function devOrderChart() {
+  const name = devMode('order-chart')
+  return isChartFixtureName(name) ? name : undefined
+}
+
 /** One mock server for the page: the gate reads the configuration it serves. */
-export const ordersMock = createOrdersMock(accessMock, () => {
-  const { legal_ready: legalReady, features } = currentConfig()
-  return { legalReady, generation: features.generation }
-})
+export const ordersMock = createOrdersMock(
+  accessMock,
+  () => {
+    const { legal_ready: legalReady, features } = currentConfig()
+    return { legalReady, generation: features.generation }
+  },
+  {
+    created: ({ id, entitlementId, profile, place }) => {
+      const state = devOrderState()
+      const chart = devOrderChart()
+      orderReadsMock.register({ id, entitlementId, profile, place, ...(state ? { state } : {}), ...(chart ? { chart } : {}) })
+    },
+  },
+)
+
+/** `?session=code-consumed` has an order id but no order behind it: give it one when a dev switch asks. */
+function seedDevOrder(): void {
+  const access = accessMock.readAccess()
+  if (!access?.orderId || orderReadsMock.has(access.orderId)) return
+  const state = devOrderState()
+  const chart = devOrderChart()
+  if (!state && !chart) return
+  orderReadsMock.register({ id: access.orderId, entitlementId: access.entitlementId, ...(state ? { state } : {}), ...(chart ? { chart } : {}) })
+}
+
+const flowReads = new Map<string, number>()
+
+function advanceDevFlow(id: string): void {
+  if (devMode('order-flow') !== 'auto') return
+  const reads = (flowReads.get(id) ?? 0) + 1
+  flowReads.set(id, reads)
+  if (reads % 3 !== 0) return
+  const state = orderReadsMock.stateOf(id)
+  const next = state ? nextHappyState(state) : null
+  if (next) orderReadsMock.advance(id, next)
+}
+
+function orderReadMode(): string | null {
+  return devMode('order-read')
+}
+
+/** Both read endpoints answer the same way: `200`/`304` with the cache headers, or a problem. */
+function readResponse<T extends object>(outcome: ReadOutcome<T>) {
+  if ('etag' in outcome) {
+    const headers = { ...mockHeaders, ETag: outcome.etag, 'Cache-Control': 'no-store', Vary: 'Cookie' }
+    if (outcome.status === 304) return new HttpResponse(null, { status: 304, headers })
+    return HttpResponse.json<T>(outcome.body, { status: 200, headers })
+  }
+  const headers = outcome.retryAfter ? { 'retry-after': String(outcome.retryAfter) } : {}
+  return problem(outcome.status, outcome.code, { detail: outcome.detail }, headers)
+}
 let devFaultArmed = false
 
 function armDevFault(): void {
@@ -238,5 +309,26 @@ export const handlers = [
     }
     const headers = outcome.retryAfter ? { 'retry-after': String(outcome.retryAfter) } : {}
     return problem(outcome.status, outcome.code, { detail: outcome.detail, ...(outcome.fields ? { fields: outcome.fields } : {}) }, headers)
+  }),
+
+  http.get<{ id: string }>('/api/v1/orders/:id', async ({ request, params }) => {
+    seedSession()
+    seedDevOrder()
+    const mode = orderReadMode()
+    await delay(mode === 'slow' ? 1500 : 80)
+    if (mode === 'error') return problem(503, 'internal_error')
+    advanceDevFlow(params.id)
+    const scenario: ReadScenario | null = mode === 'rate-limited' ? 'rate-limited' : null
+    return readResponse(orderReadsMock.read({ id: params.id, ifNoneMatch: request.headers.get('if-none-match'), scenario }))
+  }),
+
+  http.get<{ id: string }>('/api/v1/orders/:id/reading', async ({ request, params }) => {
+    seedSession()
+    seedDevOrder()
+    const mode = orderReadMode()
+    await delay(mode === 'slow' ? 1500 : 80)
+    if (mode === 'error') return problem(503, 'internal_error')
+    const scenario: ReadScenario | null = mode === 'rate-limited' ? 'rate-limited' : null
+    return readResponse(orderReadsMock.readReading({ id: params.id, ifNoneMatch: request.headers.get('if-none-match'), scenario }))
   }),
 ]

@@ -224,6 +224,76 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/orders/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Заказ — карта, статус, минимальный профиль, метаданные генерации и файлов
+         * @description Единственный ресурс, который опрашивает SCR-06 и читает SCR-07. Полный
+         *     текст разбора сюда не входит — он отдельный ресурс
+         *     (`GET /api/v1/orders/{id}/reading`), чтобы не передавать его в каждом
+         *     ответе опроса.
+         *
+         *     Доступ. Право читать существующий заказ проверяется независимо от права
+         *     создавать новые: закрытый `legal_ready`/`features.generation`, исчерпанный
+         *     или заблокированный доступ чтение не отключают. Читать можно только заказ
+         *     своего доступа (кодовая сессия) или своих доступов (аккаунт, срез 7).
+         *     Чужой и несуществующий заказ, а также `id`, не являющийся UUID, дают один
+         *     и тот же `404 not_found` (§9.5).
+         *
+         *     Кеш и опрос. Ответ — `Cache-Control: no-store`, `Vary: Cookie`, `ETag`
+         *     слабый (`W/"…"`) от сериализованного представления, куда входит
+         *     вычисленный статус: пауза очереди меняет `ETag`, хотя заказ не менялся.
+         *     Значение `ETag` непрозрачно, клиент его не разбирает. Клиент сам хранит
+         *     последний `ETag` и тело и шлёт `If-None-Match`; при совпадении — `304`
+         *     без тела. `304` — штатный исход опроса, не ошибка.
+         *
+         *     Лимит частоты на сессию с запасом над расписанием опроса; превышение —
+         *     `429 rate_limited` с `Retry-After` (в том числе для `304`-запросов).
+         */
+        get: operations["getOrder"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/orders/{id}/reading": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Готовый текст разбора
+         * @description Отдельный ресурс: содержимое принятого текста (§13, `generation.readings`).
+         *     Доступен, как только `Order.generation.reading_ready = true` — в том числе
+         *     пока иллюстрация ещё готовится, и в `failed_retryable`/`needs_review`, если
+         *     текст уже принят. Текст неизменяем после принятия.
+         *
+         *     Доступ, `404`, `ETag`/`304`, `Cache-Control` и лимит частоты — как у
+         *     `GET /api/v1/orders/{id}`. Если текст ещё не принят — `409
+         *     reading_not_ready` (заказ существует и читается, но ресурса пока нет).
+         *
+         *     Контракт минимальный: состав разбора (вопросы, visual concept, символы,
+         *     версии схемы) уточняется вместе с SCR-07 и до этого не расширяется.
+         */
+        get: operations["getOrderReading"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -386,8 +456,8 @@ export interface components {
             consent_version: string;
         };
         /**
-         * @description Минимальный ответ создания заказа. Полная схема заказа появится вместе
-         *     с `GET /api/v1/orders/{id}` (SCR-06/07).
+         * @description Минимальный ответ создания заказа. Карту и состояние читают отдельным
+         *     запросом `GET /api/v1/orders/{id}` (`Order`); `POST` карту не возвращает.
          */
         OrderCreated: {
             /** Format: uuid */
@@ -397,6 +467,272 @@ export interface components {
              * @enum {string}
              */
             status: "queued";
+        };
+        /**
+         * @description Вычисленный статус заказа (§13.6); в заказе не хранится. Порядок
+         *     прохождения: `queued` → `writing` → `illustrating` → `ready`; из любого
+         *     активного состояния возможны `failed_retryable` и `needs_review`.
+         *     `calculated` (карта есть, генерация выключена) в срезе 6 недостижим:
+         *     при выключенной генерации создание закрыто. Клиент обрабатывает его как
+         *     «генерация недоступна», не как ошибку. Процентов прогресса нет.
+         * @enum {string}
+         */
+        OrderStatus: "calculated" | "queued" | "writing" | "illustrating" | "ready" | "failed_retryable" | "needs_review";
+        /**
+         * @description Заказ для SCR-06/07: карта, текущий статус, минимальный профиль,
+         *     метаданные генерации и файлов. Текст разбора не входит (см.
+         *     `GET /api/v1/orders/{id}/reading`). Координаты, часовой пояс и источник
+         *     времени рождения не возвращаются.
+         */
+        Order: {
+            /** Format: uuid */
+            id: string;
+            status: components["schemas"]["OrderStatus"];
+            /** Format: date-time */
+            created_at: string;
+            profile: components["schemas"]["OrderProfile"];
+            chart: components["schemas"]["Chart"];
+            generation: components["schemas"]["Generation"];
+            files: components["schemas"]["OrderFiles"];
+        };
+        /** @description Минимальный профиль заказа — только то, что экран показывает пользователю */
+        OrderProfile: {
+            name: string;
+            /** Format: date */
+            birth_date: string;
+            place: components["schemas"]["OrderPlace"];
+            time: components["schemas"]["OrderBirthTime"];
+        };
+        /** @description Название места из снимка заказа, без координат и часового пояса */
+        OrderPlace: {
+            name: string;
+            region?: string;
+            country: string;
+        };
+        /** @description Время рождения, как его указал пользователь (не расчётный интервал карты) */
+        OrderBirthTime: components["schemas"]["OrderBirthTimeKnown"] | components["schemas"]["OrderBirthTimeUnknown"];
+        OrderBirthTimeKnown: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "known";
+            /** @description Местное время HH:MM */
+            value: string;
+            /** @enum {integer} */
+            accuracy_minutes: 0 | 15 | 30 | 60;
+        };
+        OrderBirthTimeUnknown: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            kind: "unknown";
+        };
+        /**
+         * @description Метаданные генерации. Связи полей:
+         *     `stop_reason` присутствует только при `status = needs_review`;
+         *     `support_reference` — только при `stop_reason = review`;
+         *     `reading_ready = true` при `illustrating` и `ready`, а при
+         *     `failed_retryable`/`needs_review` — если текст принят до остановки;
+         *     `illustration_ready = true` только при `ready`.
+         */
+        Generation: {
+            /** @description Текст принят и читается через `GET /api/v1/orders/{id}/reading` */
+            reading_ready: boolean;
+            illustration_ready: boolean;
+            /**
+             * @description Зарезервировано под `POST …/generation/resume` (Q14). Пока вызова
+             *     нет, сервер отдаёт `false`, а клиент ничего не продолжает.
+             */
+            can_resume: boolean;
+            /**
+             * @description Только при `needs_review`. `paused` — очередь на паузе, генерация
+             *     продолжится без действий пользователя; `review` — ручная проверка,
+             *     есть `support_reference`.
+             * @enum {string}
+             */
+            stop_reason?: "paused" | "review";
+            /** @description Номер обращения для поддержки; только при `stop_reason = review` */
+            support_reference?: string;
+        };
+        /**
+         * @description Наличие файлов. `pending` — появится без действий пользователя;
+         *     `unavailable` — файл не ожидается в текущем состоянии заказа (например,
+         *     пока генерация остановлена: `failed_retryable` или `needs_review` с
+         *     `review`); это не окончательный отказ, состояние может смениться.
+         *     Скачивание — `GET …/files/{kind}` (позже).
+         */
+        OrderFiles: {
+            txt: components["schemas"]["FileAvailability"];
+            png: components["schemas"]["FileAvailability"];
+            pdf: components["schemas"]["FileAvailability"];
+        };
+        /** @enum {string} */
+        FileAvailability: "available" | "pending" | "unavailable";
+        /**
+         * @description Карта, рассчитанная сервером при создании заказа. Клиент не вычисляет
+         *     знаки, интервалы, аспекты, дома и углы: он только показывает присланное.
+         *
+         *     Два разных понятия, которые не смешиваются:
+         *     1. Опорная долгота (`ChartBody.reference_longitude`) — положение тела в
+         *        один явно названный момент (`time_basis.reference_moment`). В `range`
+         *        и `unknown` это опорное положение, а не точное.
+         *     2. Неопределённость времени — `mode` и `time_basis`; интервалы долгот
+         *        (`ChartBody.longitude_range`) есть только там, где сервер их
+         *        действительно рассчитал. Отсутствие интервала не означает «точно».
+         *
+         *     Ориентация круга: в `known`, если есть `angles`, ASC стоит на 9 часах;
+         *     иначе — 0° Овна. В `range` и `unknown` — всегда 0° Овна. Долготы
+         *     возрастают против часовой стрелки.
+         *
+         *     Правила расчёта (орбисы, точность по интервалу, пограничные правила,
+         *     допустимая широта) не утверждены (Q4) и контрактом не фиксируются.
+         */
+        Chart: {
+            /** @description Версия правил и формата расчёта; непрозрачная строка */
+            version: string;
+            mode: components["schemas"]["ChartMode"];
+            time_basis: components["schemas"]["ChartTimeBasis"];
+            /** @description Десять тел в порядке Солнце → Плутон */
+            bodies: components["schemas"]["ChartBody"][];
+            /**
+             * @description Аспекты между телами, как их отобрал сервер. Клиент не пересчитывает
+             *     и не фильтрует. В `range` и `unknown` — только то, что сервер счёл
+             *     устойчивым по интервалу времени.
+             */
+            aspects: components["schemas"]["ChartAspect"][];
+            /**
+             * @description 12 куспидов Плацидуса по номерам. Нет в `unknown`; нет там, где дома
+             *     не определены (в этом случае есть предупреждение `houses_unavailable`).
+             *     В `range` точные дома пока не показываются и могут не присылаться;
+             *     состав не утверждён (Q4).
+             */
+            houses?: components["schemas"]["ChartHouse"][];
+            angles?: components["schemas"]["ChartAngles"];
+            warnings: components["schemas"]["ChartWarning"][];
+        };
+        /**
+         * @description `known` — время известно; `range` — известно с погрешностью, расчёт по
+         *     интервалу; `unknown` — время неизвестно.
+         * @enum {string}
+         */
+        ChartMode: "known" | "range" | "unknown";
+        /**
+         * @description Какому моменту соответствуют опорные долготы и какова неопределённость
+         *     времени. Соответствие режиму: `known` — `birth_moment`; `range` —
+         *     `interval_midpoint`; `unknown` — `local_noon`.
+         */
+        ChartTimeBasis: {
+            /**
+             * @description `birth_moment` — момент рождения; `interval_midpoint` — середина
+             *     допустимого интервала времени; `local_noon` — 12:00 местного времени
+             *     рождения. Два последних — опорные положения, не точные.
+             * @enum {string}
+             */
+            reference_moment: "birth_moment" | "interval_midpoint" | "local_noon";
+            /**
+             * @description Только при `range`: допустимое отклонение времени в обе стороны от
+             *     середины интервала. Не присылается в `known` и `unknown`.
+             */
+            uncertainty_minutes?: number;
+        };
+        /** @description Эклиптическая долгота в градусах, тропический зодиак */
+        Longitude: number;
+        /** @enum {string} */
+        BodyId: "sun" | "moon" | "mercury" | "venus" | "mars" | "jupiter" | "saturn" | "uranus" | "neptune" | "pluto";
+        /** @enum {string} */
+        SignId: "aries" | "taurus" | "gemini" | "cancer" | "leo" | "virgo" | "libra" | "scorpio" | "sagittarius" | "capricorn" | "aquarius" | "pisces";
+        ChartBody: {
+            id: components["schemas"]["BodyId"];
+            reference_longitude: components["schemas"]["Longitude"];
+            /** @description Знак опорной долготы */
+            sign: components["schemas"]["SignId"];
+            /**
+             * @description Знаки, в которых тело может находиться по допустимому интервалу
+             *     времени; определяет только сервер. Всегда содержит `sign`.
+             */
+            possible_signs: components["schemas"]["SignId"][];
+            /**
+             * @description Ретроградность в опорный момент. `null` — сервер не может определить
+             *     признак (в `range`/`unknown` опорный момент может быть днём стояния);
+             *     допустим только в `range` и `unknown`, в `known` всегда `true`/`false`.
+             *     Клиент не подменяет `null` значением `false`.
+             */
+            retrograde: boolean | null;
+            longitude_range?: components["schemas"]["LongitudeRange"];
+        };
+        /**
+         * @description Интервал долгот, рассчитанный сервером по допустимому интервалу времени.
+         *     Необязателен: присутствует только у тел, для которых интервал
+         *     действительно рассчитан; отсутствие не означает, что положение точное.
+         *     Дуга идёт от `from` к `to` по возрастанию долготы; при переходе через 0°
+         *     `from` больше `to`. Содержит `reference_longitude`.
+         */
+        LongitudeRange: {
+            from: components["schemas"]["Longitude"];
+            to: components["schemas"]["Longitude"];
+        };
+        /**
+         * @description Аспект между двумя разными телами. Пара уникальна; `a` стоит раньше `b`
+         *     в порядке тел (Солнце → Плутон). Орбис (`orb_deg`) необязателен: значения
+         *     и правила отбора орбисов не утверждены (Q4), клиент на него не опирается
+         *     и сам не вычисляет.
+         */
+        ChartAspect: {
+            a: components["schemas"]["BodyId"];
+            b: components["schemas"]["BodyId"];
+            kind: components["schemas"]["AspectKind"];
+            /**
+             * @description Необязательно. Отклонение от точного угла аспекта в градусах, как его
+             *     рассчитал сервер; отсутствие не означает «точно». В `range` и
+             *     `unknown` — только если сервер рассчитал его устойчиво по интервалу.
+             */
+            orb_deg?: number;
+        };
+        /**
+         * @description Соединение 0°, секстиль 60°, квадрат 90°, трин 120°, оппозиция 180°
+         * @enum {string}
+         */
+        AspectKind: "conjunction" | "sextile" | "square" | "trine" | "opposition";
+        ChartHouse: {
+            number: number;
+            longitude: components["schemas"]["Longitude"];
+        };
+        /**
+         * @description Четыре угла карты присылаются все сразу; клиент DSC и IC не выводит.
+         *     Нет в `unknown`. Присутствие не зависит от домов: при
+         *     `houses_unavailable` углы могут быть. В `range` точные углы пока не
+         *     показываются и могут не присылаться; состав не утверждён (Q4).
+         */
+        ChartAngles: {
+            asc: components["schemas"]["Longitude"];
+            mc: components["schemas"]["Longitude"];
+            dsc: components["schemas"]["Longitude"];
+            ic: components["schemas"]["Longitude"];
+        };
+        ChartWarning: {
+            code: components["schemas"]["ChartWarningCode"];
+            body?: components["schemas"]["BodyId"];
+        };
+        /**
+         * @description Стартовый перечень; расширяется. Клиент обязан показывать неизвестный код
+         *     нейтральным сообщением, а не падать. Тексты — в клиентском словаре.
+         *     `houses_unavailable` — дома для этого места не определены (подмены
+         *     системы нет); `sign_boundary` — тело `body` у границы знака, знак
+         *     может быть неточным (величина запаса не утверждена, Q4).
+         * @enum {string}
+         */
+        ChartWarningCode: "houses_unavailable" | "sign_boundary";
+        /** @description Минимальный контракт текста разбора; состав уточняется с SCR-07 */
+        Reading: {
+            schema_version: string;
+            word_count: number;
+            sections: components["schemas"]["ReadingSection"][];
+        };
+        ReadingSection: {
+            title: string;
+            text: string;
         };
         Problem: {
             type: string;
@@ -415,7 +751,7 @@ export interface components {
          * @description Стабильный машинный код ошибки (§15.3)
          * @enum {string}
          */
-        ErrorCode: "internal_error" | "validation_failed" | "place_not_found" | "birth_time_nonexistent" | "birth_time_ambiguous" | "calculation_failed" | "unauthenticated" | "not_found" | "rate_limited" | "mail_unavailable" | "otp_invalid" | "otp_expired" | "otp_attempts_exceeded" | "code_malformed" | "code_invalid" | "code_bound_to_account" | "code_claimed_elsewhere" | "session_conflict" | "entitlement_used" | "entitlement_blocked" | "consent_outdated" | "creation_unavailable" | "idempotency_key_reused" | "files_not_ready" | "resume_not_allowed";
+        ErrorCode: "internal_error" | "validation_failed" | "place_not_found" | "birth_time_nonexistent" | "birth_time_ambiguous" | "calculation_failed" | "unauthenticated" | "not_found" | "rate_limited" | "mail_unavailable" | "otp_invalid" | "otp_expired" | "otp_attempts_exceeded" | "code_malformed" | "code_invalid" | "code_bound_to_account" | "code_claimed_elsewhere" | "session_conflict" | "entitlement_used" | "entitlement_blocked" | "consent_outdated" | "creation_unavailable" | "idempotency_key_reused" | "files_not_ready" | "reading_not_ready" | "resume_not_allowed";
     };
     responses: {
         /** @description Ошибка в формате RFC 9457 */
@@ -427,10 +763,71 @@ export interface components {
                 "application/problem+json": components["schemas"]["Problem"];
             };
         };
+        /**
+         * @description Представление не изменилось с `If-None-Match`. Без тела; `ETag` и
+         *     `Cache-Control` повторяются. Клиент оставляет прежнее тело.
+         */
+        NotModified: {
+            headers: {
+                ETag: components["headers"]["ETag"];
+                "Cache-Control": components["headers"]["CacheControlNoStore"];
+                [name: string]: unknown;
+            };
+            content?: never;
+        };
+        /**
+         * @description Нет действующей сессии (`unauthenticated`): не выдавалась, истекла или
+         *     отозвана (в том числе код привязан к аккаунту, §9.2).
+         */
+        Unauthenticated: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /**
+         * @description Заказа нет, он чужой или `id` не UUID (`not_found`); ответ один и тот же
+         *     во всех трёх случаях.
+         */
+        OrderNotFound: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+        /** @description Превышен лимит частоты (`rate_limited`) */
+        RateLimited: {
+            headers: {
+                "Retry-After": components["headers"]["RetryAfter"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
     };
-    parameters: never;
+    parameters: {
+        /**
+         * @description Идентификатор заказа. Значение, не являющееся UUID, обрабатывается как
+         *     несуществующий заказ (`404 not_found`), а не как ошибка запроса.
+         */
+        OrderId: string;
+        /** @description `ETag` последнего полученного ответа; при совпадении сервер отвечает `304` без тела */
+        IfNoneMatch: string;
+    };
     requestBodies: never;
-    headers: never;
+    headers: {
+        /** @description Слабый валидатор представления, `W/"…"`; непрозрачен для клиента */
+        ETag: string;
+        /** @description Всегда `no-store` (§15.1); условные запросы клиент делает сам */
+        CacheControlNoStore: "no-store";
+        /** @description Через сколько секунд можно повторить */
+        RetryAfter: number;
+    };
     pathItems: never;
 }
 export type $defs = Record<string, never>;
@@ -828,6 +1225,87 @@ export interface operations {
                     "application/problem+json": components["schemas"]["Problem"];
                 };
             };
+            default: components["responses"]["Problem"];
+        };
+    };
+    getOrder: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description `ETag` последнего полученного ответа; при совпадении сервер отвечает `304` без тела */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
+            path: {
+                /**
+                 * @description Идентификатор заказа. Значение, не являющееся UUID, обрабатывается как
+                 *     несуществующий заказ (`404 not_found`), а не как ошибка запроса.
+                 */
+                id: components["parameters"]["OrderId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Текущее состояние заказа */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    "Cache-Control": components["headers"]["CacheControlNoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Order"];
+                };
+            };
+            304: components["responses"]["NotModified"];
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["OrderNotFound"];
+            429: components["responses"]["RateLimited"];
+            default: components["responses"]["Problem"];
+        };
+    };
+    getOrderReading: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description `ETag` последнего полученного ответа; при совпадении сервер отвечает `304` без тела */
+                "If-None-Match"?: components["parameters"]["IfNoneMatch"];
+            };
+            path: {
+                /**
+                 * @description Идентификатор заказа. Значение, не являющееся UUID, обрабатывается как
+                 *     несуществующий заказ (`404 not_found`), а не как ошибка запроса.
+                 */
+                id: components["parameters"]["OrderId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Принятый текст разбора */
+            200: {
+                headers: {
+                    ETag: components["headers"]["ETag"];
+                    "Cache-Control": components["headers"]["CacheControlNoStore"];
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Reading"];
+                };
+            };
+            304: components["responses"]["NotModified"];
+            401: components["responses"]["Unauthenticated"];
+            404: components["responses"]["OrderNotFound"];
+            /** @description Текст ещё не принят (`reading_not_ready`); заказ существует */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["Problem"];
+                };
+            };
+            429: components["responses"]["RateLimited"];
             default: components["responses"]["Problem"];
         };
     };

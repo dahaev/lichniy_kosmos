@@ -101,6 +101,8 @@ export interface SessionEntitlement {
 export function createAccessMock(now: () => number = Date.now) {
   let entitlements = registry()
   let current: ActiveSession | null = null
+  /** A session whose code was blocked: it no longer creates anything, but still reads its order (SCR-06 decision 9). */
+  let blocked: ActiveSession | null = null
   let failures: number[] = []
 
   function findById(id: string): Entitlement | undefined {
@@ -137,13 +139,38 @@ export function createAccessMock(now: () => number = Date.now) {
 
   function readSession(): Schemas['Session'] {
     if (current && current.expiresAt <= now()) current = null
-    // A blocked entitlement has no valid session (ARCHITECTURE_MVP_v2 §9.2).
-    if (current && entitlements.get(current.key)?.state === 'blocked') current = null
+    // A blocked entitlement has no valid session (ARCHITECTURE_MVP_v2 §9.2); reading is kept apart.
+    if (current && entitlements.get(current.key)?.state === 'blocked') {
+      blocked = current
+      current = null
+    }
+    // So has an entitlement the owner has just bound to an account (§9.2).
+    if (current && entitlements.get(current.key)?.boundToAccount) current = null
     return current ? codeSession(current) : { principal: 'anonymous' }
   }
 
   return {
     session: readSession,
+
+    /**
+     * Who may READ an existing order (SCR-06 decision 9). Reading does not
+     * depend on the right to create new orders: a code blocked for new paid
+     * steps still opens its finished order (Q9). It does end with the session
+     * itself (expiry) and when the entitlement is bound to an account (§9.2).
+     */
+    readAccess(): { entitlementId: string; orderId?: string } | null {
+      readSession()
+      const session = current ?? blocked
+      const entitlement = session && session.expiresAt > now() ? entitlements.get(session.key) : undefined
+      if (!entitlement || entitlement.boundToAccount) return null
+      return entitlement.orderId ? { entitlementId: entitlement.id, orderId: entitlement.orderId } : { entitlementId: entitlement.id }
+    },
+
+    /** An account claimed the code: every code session of this entitlement stops being valid. */
+    bindToAccount(entitlementId: string): void {
+      const entitlement = findById(entitlementId)
+      if (entitlement) entitlement.boundToAccount = true
+    },
 
     /** The entitlement of the live code session, or null without one. */
     sessionEntitlement(): SessionEntitlement | null {
@@ -186,6 +213,7 @@ export function createAccessMock(now: () => number = Date.now) {
         return { status: 409, code: 'session_conflict', detail: accessDetails.sessionConflict }
       }
       current = { key, expiresAt: now() + SESSION_TTL_MS }
+      blocked = null
       return { status: 200, body: codeSession(current) }
     },
 
@@ -193,10 +221,12 @@ export function createAccessMock(now: () => number = Date.now) {
     seed(kind: 'available' | 'consumed'): void {
       const code = kind === 'available' ? syntheticCodes.available : syntheticCodes.consumed
       current = { key: normalizeCode(code) ?? '', expiresAt: now() + SESSION_TTL_MS }
+      blocked = null
     },
 
     reset(): void {
       current = null
+      blocked = null
       failures = []
       entitlements = registry()
     },

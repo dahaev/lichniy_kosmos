@@ -418,6 +418,7 @@ stateDiagram-v2
 
 - Токен: 32 байта CSPRNG, base64url, в cookie `__Host-lk_sid` (`HttpOnly`, `Secure`, `SameSite=Lax`, `Path=/`). В БД — SHA-256 от токена.
 - Проверка при каждом запросе: сессия не отозвана и не истекла; для `account` — аккаунт активен; для `code` — доступ существует, `account_id IS NULL`, код не заблокирован для новых операций.
+- Право **читать** существующий заказ (`GET /orders/{id}`, `…/reading`, файлы) проверяется независимо от права создавать новые заказы (решение владельца 16.11.2026, SCR-06 Р-D19; Q9): блокировка кода или закрытый `legal_ready`/`generation` чтение не отключают; истечение сессии и привязка кода к аккаунту — отключают. Согласовать с `GET /session`, который у заблокированного кода пока отвечает `anonymous` (SCR-06 §0.17, вопрос О-6).
 - Сроки (предложение, Q2): `account` — 30 дней абсолютный, 7 дней бездействия; `code` — 7 дней. `last_seen_at` обновляется не чаще раза в N минут.
 - Выход: `DELETE /api/v1/session` отзывает серверную запись и очищает cookie.
 - После привязки кода к аккаунту все кодовые сессии этого доступа становятся недействительными автоматически (из-за условия `account_id IS NULL`).
@@ -551,6 +552,7 @@ sequenceDiagram
 - Аспекты: 0°/8°, 60°/4°, 90°/6°, 120°/6°, 180°/8°, только между телами.
 - Режимы: `known`; `range` (погрешность ±15/30/60 — расчёт на срезах интервала, сохраняются только устойчивые признаки и «возможные знаки/дома»); `unknown` (весь реальный местный день, включая 23/25-часовые сутки; нет `birth_utc`, домов, углов).
 - Запас у границы знака 0.02° → предупреждение о неопределённости.
+- Опорные долготы (решения SCR-06 Р-D12–Р-D15, 16.11.2026): в `known` — на момент рождения; в `range` — на середину интервала времени; в `unknown` — на 12:00 местного времени рождения. В `range`/`unknown` это явно помеченные опорные положения, не точные; сервер присылает их отдельно от неопределённости времени. Возможные знаки и интервалы долгот определяет только сервер, интервал присылается лишь там, где рассчитан. Орбисы, точность интервального расчёта и пограничные правила остаются на подтверждении (Q4).
 - Эти правила требуют подтверждения владельцем как продуктовые (Q4), т.к. они не универсальный стандарт.
 
 ### 12.2. Время и часовые пояса
@@ -655,7 +657,7 @@ stateDiagram-v2
 | `failed_retryable` | Шаг остановлен с известным исходом, продолжение разрешено |
 | `needs_review` | Остановка до ручной проверки (включая `paused`) |
 
-Дополнительно в ответе: `reading_ready`, `illustration_ready`, `can_resume`, `support_reference`. Процентов прогресса нет.
+Дополнительно в ответе: `reading_ready`, `illustration_ready`, `can_resume` (до решения Q14 всегда `false`), `stop_reason` (`paused|review`, только при `needs_review`; решение SCR-06 Р-D16) и `support_reference` (только при `stop_reason = review`). Процентов прогресса нет.
 
 ### 13.7. Бюджет и защита от сжигания денег
 
@@ -686,7 +688,7 @@ Blob-хранилище — интерфейс `BlobStore` (`Put`, `Open`, `Stat
 Согласованность с БД: blob всегда записывается **до** ссылки на него в транзакции; бэкап делает сначала `pg_dump`, затем копию blob-каталога → в копии blob ⊇ ссылки.
 
 PDF-движок (Q6, спайк):
-- **Typst** (CLI-подпроцесс, шаблон в репозитории): качественная типографика, кириллица, детерминированность, лёгкий; круг карты передаётся как SVG, сгенерированный в Go.
+- **Typst** (CLI-подпроцесс, шаблон в репозитории): качественная типографика, кириллица, детерминированность, лёгкий; круг карты передаётся как SVG, сгенерированный в Go. Геометрия Go-рендерера проверяется теми же golden-фикстурами, что и `frontend/src/chart/` (углы, ориентация, разнос значков); фикстуры добавляются в срезе PDF (SCR-06 Р-D20).
 - Chromium (например, через Gotenberg): HTML/CSS-вёрстка, максимальная близость к сайту, но тяжёлый контейнер.
 - Go-библиотеки PDF низкого уровня: без внешних процессов, но премиальную editorial-вёрстку делать дорого.
 
@@ -705,7 +707,7 @@ PDF-движок (Q6, спайк):
 - Префикс `/api/v1`, JSON, ≤ 16 KiB тела, неизвестные поля отклоняются.
 - Ошибки — `application/problem+json` (RFC 9457): `type`, `title`, `status`, `detail` (на русском для показа), `code` (стабильный машинный код), `fields` для ошибок валидации.
 - Источник истины — `api/openapi.yaml`. TypeScript-типы и клиент генерируются (`openapi-typescript` + `openapi-fetch`); Go-сторона — сгенерированные DTO/интерфейс сервера (`oapi-codegen`, стандартный `net/http`) либо ручные хендлеры с контрактными тестами, валидирующими ответы по спецификации. Выбор фиксируется в срезе 0.
-- `Cache-Control: no-store` для API; `ETag` на `GET /orders/{id}` для дешёвого опроса.
+- `Cache-Control: no-store` для API; слабый `ETag` на `GET /orders/{id}` и `GET /orders/{id}/reading` для дешёвого опроса; `304` объявлен в контракте как штатный ответ.
 
 ### 15.2. Эндпоинты MVP
 
@@ -728,7 +730,8 @@ PDF-движок (Q6, спайк):
 | `PUT /api/v1/entitlements/{id}/draft` | Session | Сохранить черновик (если доступ `available`) |
 | `POST /api/v1/orders` | Session + Idempotency-Key | Создать заказ (§11) |
 | `GET /api/v1/orders` | Session | Свои заказы |
-| `GET /api/v1/orders/{id}` | Session | Заказ: анкета, место, карта, статус генерации, текст, наличие файлов |
+| `GET /api/v1/orders/{id}` | Session | Заказ: карта, статус, минимальный профиль, метаданные генерации и файлов; `ETag`/`304`; текст не входит (в контракте с `0.4.0-6`) |
+| `GET /api/v1/orders/{id}/reading` | Session | Готовый текст разбора отдельным ресурсом; `409 reading_not_ready`, пока текст не принят (минимальный контракт, SCR-07 уточнит) |
 | `POST /api/v1/orders/{id}/generation/resume` | Session + Idempotency-Key | Продолжить только при `can_resume` |
 | `GET /api/v1/orders/{id}/files/{kind}` | Session | `reading.txt`, `illustration.png`, `report.pdf` |
 
@@ -736,13 +739,13 @@ PDF-движок (Q6, спайк):
 
 ### 15.3. Каталог кодов ошибок (стартовый)
 
-`validation_failed`, `place_not_found`, `birth_time_nonexistent`, `birth_time_ambiguous`, `calculation_failed`, `unauthenticated`, `not_found`, `rate_limited`, `mail_unavailable`, `otp_invalid`, `otp_expired`, `otp_attempts_exceeded`, `code_malformed`, `code_invalid`, `code_bound_to_account`, `code_claimed_elsewhere`, `session_conflict`, `entitlement_used`, `entitlement_blocked`, `consent_outdated`, `creation_unavailable`, `idempotency_key_reused`, `files_not_ready`, `resume_not_allowed`.
+`validation_failed`, `place_not_found`, `birth_time_nonexistent`, `birth_time_ambiguous`, `calculation_failed`, `unauthenticated`, `not_found`, `rate_limited`, `mail_unavailable`, `otp_invalid`, `otp_expired`, `otp_attempts_exceeded`, `code_malformed`, `code_invalid`, `code_bound_to_account`, `code_claimed_elsewhere`, `session_conflict`, `entitlement_used`, `entitlement_blocked`, `consent_outdated`, `creation_unavailable`, `idempotency_key_reused`, `files_not_ready`, `reading_not_ready`, `resume_not_allowed`.
 
 ### 15.4. Ключевые модели (смысл, не схема)
 
 - `Profile`: `name`, `birth_date`, `time: {kind: known|unknown, value?, source?, accuracy_minutes?}`, `place_id`. Явный дискриминатор вместо пары `time_unknown` + `birth_time` исключает противоречивые сочетания.
-- `Chart`: `mode`, `bodies[] {id, longitude, sign, possible_signs[], speed, retrograde}`, `aspects[]`, `houses?`, `angles?`, `warnings[]`, `version`. В режиме `unknown` полей `houses/angles` нет.
-- `OrderView` (собирается в `results`): `id`, `status` (вычисленный), `created_at`, `profile`, `place`, `chart`, `generation {reading_ready, illustration_ready, can_resume, support_reference?}`, `reading?`, `files {txt, png, pdf: available|pending|unavailable}`.
+- `Chart` (схема в `openapi.yaml` с `0.4.0-6`): `version`, `mode`, `time_basis {reference_moment, uncertainty_minutes?}`, `bodies[] {id, reference_longitude, sign, possible_signs[], retrograde, longitude_range?}`, `aspects[] {a, b, kind}`, `houses?`, `angles?`, `warnings[] {code, body?}`. Опорная долгота и неопределённость времени — разные поля; `longitude_range` только при фактическом расчёте. В режиме `unknown` полей `houses/angles` нет. `speed` из контракта убран как ненужный клиенту (SCR-06 §0.5).
+- `Order` (ответ `GET /orders/{id}`, собирается в `results`): `id`, `status` (вычисленный), `created_at`, `profile` (минимальный: имя, дата, название места, время как ввёл пользователь), `chart`, `generation {reading_ready, illustration_ready, can_resume, stop_reason?, support_reference?}`, `files {txt, png, pdf: available|pending|unavailable}`. Текст — отдельный ресурс `Reading` (`GET /orders/{id}/reading`), в опрос не входит.
 
 ---
 
@@ -760,6 +763,7 @@ frontend/src/
 ├── api/            # сгенерированный клиент + обработка problem+json → доменные ошибки
 ├── ui/             # дизайн-система: токены CSS, PrimaryCTA, SecondaryCTA, Field, ProgressStep, OTPInput, AccessCodeInput
 ├── scene/          # Three.js: SceneDirector, композиции, слои, качество, fallback (§17)
+├── chart/          # общая геометрия карты SCR-06/07: типы, chartGeometry, ChartWheel (SVG); без Vue-экранов и Three.js (решение SCR-06 Р-D20)
 ├── motion/         # motion-токены (общие для DOM и сцены), пресеты переходов
 ├── features/
 │   ├── home/       # SCR-01
@@ -767,7 +771,7 @@ frontend/src/
 │   ├── access/     # SCR-04/05/10: код, выбор доступа, согласие, создание заказа
 │   ├── auth/       # SCR-08: OTP
 │   ├── creation/   # SCR-06: timeline сцены + опрос статуса
-│   ├── result/     # SCR-07: ChartView (SVG), ReadingSection, ResultDownload
+│   ├── result/     # SCR-07: ChartView (на основе src/chart/), ReadingSection, ResultDownload
 │   └── account/    # SCR-09
 └── content/        # SCR-11…14: тексты услуги, пример, поддержка, правовые документы
 ```
@@ -776,7 +780,7 @@ frontend/src/
 
 - Серверное состояние — источник истины; Pinia хранит только: черновик анкеты, выбранный доступ, ключ идемпотентности, текущую сессию, UI-флаги.
 - Черновик: версионированная схема, запись в `sessionStorage`, TTL, очистка после создания заказа и при выходе.
-- Composable `useOrderStatus(id)`: опрос `GET /orders/{id}` с `ETag`, интервал 2 → 5 → 10 с, пауза в скрытой вкладке, остановка на `ready/needs_review/failed_retryable`. SSE — позже, если опрос окажется недостаточным.
+- Composable `useOrderStatus(id)`: опрос `GET /orders/{id}` с `ETag` (`304` — штатно), интервал 2 → 5 → 10 с, пауза в скрытой вкладке; остановка на `ready` и `failed_retryable`, редкая проверка на `needs_review` (30 с при `paused`, 120 с и при возврате во вкладку при `review`; SCR-06 §0.4, Р-D2). SSE — позже, если опрос окажется недостаточным.
 - Создание заказа: кнопка блокируется на время запроса; при сетевой ошибке — повтор с тем же ключом, а не новый ключ; при неизвестном исходе — сначала `GET /entitlements/{id}`.
 
 ### 16.4. Маршрутизация и guards

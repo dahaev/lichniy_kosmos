@@ -34,6 +34,7 @@
     "vue-router": "^5.5.0"
   },
   "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^26.6.6",
     "@types/pngjs": "^6.0.5",
     "@types/three": "^0.187.0",
@@ -44,6 +45,7 @@
     "eslint": "^9.39.5",
     "eslint-plugin-vue": "^10.12.1",
     "globals": "^17.14.0",
+    "js-yaml": "^4.3.2",
     "jsdom": "^27.0.1",
     "msw": "^2.15.0",
     "openapi-typescript": "^7.13.0",

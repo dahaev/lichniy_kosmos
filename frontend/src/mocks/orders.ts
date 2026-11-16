@@ -79,7 +79,7 @@ interface StoredOrder {
 const isObject = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value)
 
 /** JSON with sorted keys: equal requests give equal strings (the mock's fingerprint). */
-function canonical(value: unknown): string {
+export function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`
   if (isObject(value)) {
     const keys = Object.keys(value).sort()
@@ -102,7 +102,20 @@ function orderId(n: number): string {
   return `00000000-0000-4000-8000-${(0xe0000 + n).toString(16).padStart(12, '0')}`
 }
 
-export function createOrdersMock(access: AccessMock, gate: () => CreationGate) {
+/** A freshly created order, as the read side of the mock needs to learn about it. */
+export interface CreatedOrder {
+  id: string
+  entitlementId: string
+  /** The normalized profile and its place; null when the stand created the order itself («another tab»). */
+  profile: Schemas['Profile'] | null
+  place: Schemas['Place'] | null
+}
+
+export interface OrdersHooks {
+  created?: (order: CreatedOrder) => void
+}
+
+export function createOrdersMock(access: AccessMock, gate: () => CreationGate, hooks: OrdersHooks = {}) {
   /** The version the "server" currently requires; the stand can move it (`consent-outdated`). */
   let serverConsent: string = TEST_CONSENT_VERSION
   let sequence = 0
@@ -119,12 +132,18 @@ export function createOrdersMock(access: AccessMock, gate: () => CreationGate) {
     return { status, code, detail, ...extra }
   }
 
-  function commit(entitlementId: string, key: string, fingerprint: string): StoredOrder | null {
+  function commit(
+    entitlementId: string,
+    key: string,
+    fingerprint: string,
+    created: Pick<CreatedOrder, 'profile' | 'place'> = { profile: null, place: null },
+  ): StoredOrder | null {
     sequence += 1
     const order: StoredOrder = { id: orderId(sequence), fingerprint }
     if (!access.consume(entitlementId, order.id)) return null
     byKey.set(`${entitlementId}:${key}`, order)
     byEntitlement.set(entitlementId, order)
+    hooks.created?.({ id: order.id, entitlementId, ...created })
     return order
   }
 
@@ -186,7 +205,8 @@ export function createOrdersMock(access: AccessMock, gate: () => CreationGate) {
       }
       if (scenario === 'calculation-failed') return problem(422, 'calculation_failed', orderDetails.calculationFailed)
 
-      const order = commit(entitlement.id, key, fingerprint)
+      const created = checked?.status === 200 ? { profile: checked.body.profile, place: checked.body.place } : undefined
+      const order = commit(entitlement.id, key, fingerprint, created)
       if (!order) return problem(409, 'entitlement_used', orderDetails.entitlementUsed)
       return { status: 201, body: { id: order.id, status: 'queued' } }
     },

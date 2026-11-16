@@ -30,13 +30,24 @@ function problem(status: number, body: Record<string, unknown>, headers: Record<
   return HttpResponse.json({ type: 'about:blank', title: 'Error', status, ...body }, { status, headers: { 'content-type': 'application/problem+json', ...headers } })
 }
 
+/**
+ * Clones that are read for recording. undici ties a clone to the original body:
+ * when the clone object is garbage-collected, the original's stream is cancelled
+ * if nobody has read it yet. The regular mock reads it only after its simulated
+ * delay, so under memory pressure it failed with «Body is unusable» and answered
+ * 400 `validation_failed`. Holding the clones keeps the original intact.
+ */
+const heldClones: Request[] = []
+
 /** Every `POST /orders`: the key and the body; the request then goes on to the regular mock. */
 function recordOrders(): { keys: (string | null)[]; bodies: unknown[] } {
   const seen: { keys: (string | null)[]; bodies: unknown[] } = { keys: [], bodies: [] }
   server.use(
     http.post(ORDERS, async ({ request }) => {
       seen.keys.push(request.headers.get('idempotency-key'))
-      seen.bodies.push(await request.clone().json())
+      const copy = request.clone()
+      heldClones.push(copy)
+      seen.bodies.push(await copy.json())
     }),
   )
   return seen
@@ -109,6 +120,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   for (const wrapper of mounted.splice(0)) wrapper.unmount()
+  heldClones.length = 0
   vi.unstubAllGlobals()
   vi.unstubAllEnvs()
   window.history.replaceState(null, '', '/')
